@@ -2,7 +2,7 @@
 
 These optional commands transfer annotations for one explicit book pair.
 They use the Mac Kindle app, Apple Books, and a separate clippyconvert checkout.
-They do not write reading positions.
+For reading positions, use [native position transfer](native-positions.md).
 
 ## Verified result
 
@@ -17,11 +17,13 @@ The local MOBI copy was a separate book and was not used as cloud evidence.
 | Kindle highlights to Apple Books | User confirmed display on Mac, iPhone, and iPad |
 | Pink color correction | Existing Apple note preserved; user confirmed pink on all three Apple devices |
 | New pink import through the adapted writer | Style 4 written to an isolated database copy; repeat import added no row |
+| New Kindle note to Apple | Third-chapter note was absent in Apple before import; user confirmed the new note and blue highlight after reopen |
 | Physical Kindle | Not tested |
 
 The pilot used Kindle 7.70.1, Calibre 9.17.0, KFX Input 2.34.2, and lxml 6.1.3.
 This is evidence for one book and these versions. It is not a compatibility claim
 for all books, app versions, or Kindle devices.
+The temporary app and tools were removed after the pilot; see [cleanup](native-positions.md#pilot-cleanup).
 
 ## Local runtime
 
@@ -75,7 +77,8 @@ python3 -m apple_kindle_bridge apple-highlights \
 ```
 
 Add `--apply` to write. Use `--annotation-uuid UUID` to select one Apple source
-annotation for a forward import. Backups go to `state/native-backups/` unless
+annotation for a forward import. Use `--kindle-annotation-id ID` to select one
+Kindle highlight and its attached note for a reverse import. Backups go to `state/native-backups/` unless
 `--backup-dir` selects another folder. Reports and backups can contain private data.
 
 The tool closes the target app before a write, checks for changes, saves a
@@ -87,14 +90,14 @@ the local queue write succeeded. Confirm upload and target display separately.
 - Matching requires one exact normalized passage. Ambiguous passages are refused.
 - Yellow, blue, and pink retain their color. Unsupported colors are refused.
 - Underline is a separate style. Its device display has not been verified.
-- Forward imports carry attached notes. Reverse imports carry highlights only.
+- Both directions carry notes attached to highlights. Standalone notes are not imported.
+- Reverse notes must match one highlight at the captured endpoint offset. Ambiguous attachments are refused.
 - Existing Apple notes remain intact. A visible note that already existed in
   Apple Books is not evidence of reverse note transfer.
 - Existing target conflicts stop the import. Color changes and note edits are
   not merged automatically. The pilot color repair was a separate scoped update.
 - Deletions are not transferred. There is no background synchronization service.
-- Reading-position writes remain unimplemented. Hardware is not the only
-  remaining requirement for that feature.
+- Native position writes use a separate command. Highlight imports do not move the reader.
 
 Keep a database backup before an import. Restore it only with the app closed;
 cloud synchronization can reapply records after a local restore.

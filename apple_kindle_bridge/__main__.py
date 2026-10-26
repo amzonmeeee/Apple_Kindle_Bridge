@@ -1,4 +1,4 @@
-"""Apple Books inspection, position conversion, and explicit highlight imports."""
+"""Apple Books inspection, position conversion, and explicit native transfers."""
 import argparse
 import json
 import os
@@ -29,7 +29,7 @@ def save_json(path, data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Apple Books bridge; native highlight writes require --apply.")
+    parser = argparse.ArgumentParser(description="Apple Books bridge; native writes require --apply.")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("inspect", "export"):
         cmd = commands.add_parser(name)
@@ -47,9 +47,26 @@ def main():
         native.add_argument("--kindle-book-id", required=True)
         if name == "kindle-highlights":
             native.add_argument("--annotation-uuid")
+        else:
+            native.add_argument("--kindle-annotation-id")
         native.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
         native.add_argument("--apply", action="store_true")
         native.add_argument("--output", type=Path, required=True)
+    native_position = commands.add_parser("native-position", help="Transfer one book's resume position between the Mac apps")
+    native_position.add_argument("--config", type=Path, default=Path('.runtime/native.json'))
+    native_position.add_argument("--asset-id", required=True)
+    native_position.add_argument("--kindle-book-id", required=True)
+    native_position.add_argument("--to", choices=('apple', 'kindle'), required=True)
+    native_position.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+    native_position.add_argument("--apply", action="store_true")
+    native_position.add_argument("--output", type=Path, required=True)
+    apple_position = commands.add_parser("apple-position", help="Write a verified position to Apple Books")
+    apple_position.add_argument("source", type=Path)
+    apple_position.add_argument("--asset-id", required=True)
+    apple_position.add_argument("--expected-cfi", required=True)
+    apple_position.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+    apple_position.add_argument("--apply", action="store_true")
+    apple_position.add_argument("--output", type=Path, required=True)
     highlights = commands.add_parser("highlights-export", help="Export private Apple Books highlights and notes without reader writes")
     highlights.add_argument("--library-db", type=Path)
     highlights.add_argument("--annotations-db", type=Path)
@@ -94,7 +111,27 @@ def main():
             cmd.add_argument("--plan", type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.command in ("kindle-highlights", "apple-highlights"):
+        if args.command == "native-position":
+            from .native_position import transfer
+            if args.output.expanduser().exists():
+                raise InspectionError("Output already exists; choose a new report name")
+            result = transfer(args.config, args.asset_id, args.kindle_book_id, args.to,
+                              args.backup_dir, args.apply)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()), "status": result['status'],
+                              "write_performed": result['write_performed']}, indent=2))
+            return 0
+        elif args.command == "apple-position":
+            from .apple_position import transfer
+            if args.output.expanduser().exists():
+                raise InspectionError("Output already exists; choose a new report name")
+            result = transfer(args.asset_id, json.loads(args.source.read_text()), args.expected_cfi,
+                              args.backup_dir, args.apply)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()), "status": result['status'],
+                              "write_performed": result['write_performed']}, indent=2))
+            return 0
+        elif args.command in ("kindle-highlights", "apple-highlights"):
             if args.output.expanduser().exists():
                 raise InspectionError("Output already exists; choose a new report name before importing")
             if args.command == "kindle-highlights":
@@ -104,7 +141,7 @@ def main():
             else:
                 from .native_reverse import transfer
                 result = transfer(args.config, args.asset_id, args.kindle_book_id,
-                                  args.backup_dir, args.apply)
+                                  args.backup_dir, args.apply, args.kindle_annotation_id)
             save_json(args.output, result)
             print(json.dumps({"output": str(args.output.resolve()), **result['summary'],
                               "write_performed": result['write_performed'],

@@ -17,16 +17,23 @@ They are not completed synchronization features.
   Confirm display after upload and detect the existing import on a repeat run.
 - [x] Transfer Kindle highlights to Apple Books. Confirm iCloud propagation.
 - [x] Preserve shared highlight colors. Confirm pink on Mac, iPhone, and iPad.
+- [x] Import a new Kindle-only note into Apple Books. Preserve existing note conflicts.
+- [x] Transfer native reading positions between the Mac apps.
+  Confirm forward and backward resume after reopening the original test book.
+  Confirm the backward Apple position on the user's mobile devices.
+- [x] Remove temporary tools. Move the test app and its new main container to Trash.
 
-## Next usable result
+## Next: physical Kindle acceptance
 
-- [ ] Complete reading-position transfer on the selected reader route.
-  Confirm the position after the book closes and opens again.
-  Keep deliberate backward reading and identify conflicting changes.
-- [ ] Add Kindle-to-Apple note import. Existing Apple notes must remain intact.
-- [ ] Verify highlights and reading positions on a physical Kindle.
-  Mac app acceptance does not establish device behavior.
-- [ ] Remove the temporary native test app and tools after the native pilot ends.
+- [ ] Confirm the model and firmware, then test the existing cloud book on the device.
+- [ ] Verify highlights, colors, and notes on the physical Kindle.
+- [ ] Verify forward and backward positions through Whispersync, then close and reopen.
+- [ ] Verify offline reading and reconnect. Record how competing device changes behave.
+
+These are hardware acceptance gates, not a promise of stock Kindle compatibility.
+The current implementation is a manual, one-book native Mac transfer.
+KOReader device writes and unattended conflict resolution are not implemented.
+See [supported position scope](docs/native-positions.md).
 
 Native imports reuse [clippyconvert](https://github.com/seanmatheny/clippyconvert).
 Do not add automatic deletion or conflict resolution until their rules are defined.

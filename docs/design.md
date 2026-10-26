@@ -105,7 +105,10 @@ It uses the existing progress API and does not change remote records.
 - A local HTTP fixture connects the KOReader API adapter to the real CRengine and the baseline comparison.
 
 These results do not establish universal compatibility with other books or firmware.
-Page rendering, saved-position reopening, Apple writeback, and Kindle device behavior remain unverified.
+The native pilot later verified Apple writeback and saved-position reopening in
+both Mac apps, including a backward move. The user confirmed the backward Apple
+position on mobile devices. See [native position evidence](native-positions.md).
+Physical Kindle display and cloud position delivery remain unverified.
 
 ## Existing implementations
 

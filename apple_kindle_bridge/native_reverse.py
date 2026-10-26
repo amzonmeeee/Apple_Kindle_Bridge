@@ -15,7 +15,25 @@ from .apple import discover, file_status, snapshot
 from .native_highlights import runtime
 
 
-def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
+def attached_note(highlight, annotations, offset):
+    """Join only a unique native note at the observed endpoint offset."""
+    position = highlight.end + offset
+    candidates = [a for a in annotations if a.dataset == 3 and a.start == position and a.end == position]
+    owners = [a for a in annotations if a.dataset in (1, 12) and a.end + offset == position]
+    if not candidates:
+        return None
+    if len(candidates) != 1 or len(owners) != 1:
+        raise ValueError('Native note attachment is ambiguous')
+    metadata = candidates[0].payload.get('json_metadata', {})
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    note = metadata.get('note_text')
+    if not isinstance(note, str):
+        raise ValueError('Native note text is missing')
+    return note
+
+
+def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_id=None):
     cfg, modules = runtime(config)
     from clippy.parse_clippings import Clipping
     ksdk = modules['ksdk']
@@ -39,22 +57,30 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
     reader = modules['kindle_annots'].open_book(book)
     if reader.text_length != book.maxpos:
         raise ValueError('Parsed positions differ from the Kindle app position space')
-    source = [a for a in ksdk.load_existing_annotations(ksdk.find_ksdk_db(), book.dataset_id)
-              if a.source == 'server_view' and a.dataset in (1, 12)]
+    synced = [a for a in ksdk.load_existing_annotations(ksdk.find_ksdk_db(), book.dataset_id)
+              if a.source == 'server_view']
+    source = [a for a in synced if a.dataset in (1, 12)]
+    if annotation_id:
+        source = [a for a in source if a.annotation_id == annotation_id]
+    capture = json.loads(Path(cfg['capture']).expanduser().read_text())
+    note_offset = capture.get('note_offset')
+    if type(note_offset) is not int:
+        raise ValueError('A captured note offset is required')
     if not source:
         raise ValueError('The selected Kindle book has no synced highlights')
     with snapshot(annotations) as db:
         existing = [dict(r) for r in db.execute(
             'SELECT ZANNOTATIONUUID,ZANNOTATIONLOCATION,ZANNOTATIONSELECTEDTEXT,ZANNOTATIONSTYLE,'
-            'ZANNOTATIONISUNDERLINE FROM ZAEANNOTATION WHERE ZANNOTATIONASSETID=? '
+            'ZANNOTATIONISUNDERLINE,ZANNOTATIONNOTE FROM ZAEANNOTATION WHERE ZANNOTATIONASSETID=? '
             'AND ZANNOTATIONTYPE=2 AND ZANNOTATIONDELETED=0', (aid,))]
     normalize = lambda s: modules['epub_cfi'].normalize_with_map(s or '')[0]
-    clips, entries = [], []
+    clips, entries, notes = [], [], []
     for a in source:
         metadata = a.payload.get('json_metadata', {})
         if isinstance(metadata, str):
             metadata = json.loads(metadata)
         color = metadata.get('mchl_color')
+        source_note = attached_note(a, synced, note_offset)
         style = apple_style(color, a.dataset == 12)
         text = reader.extract_text(a.start, a.end).strip()
         needle = normalize(text)
@@ -66,12 +92,18 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
         hits = [r for r in existing if r['ZANNOTATIONLOCATION'] == loc.cfi
                 or normalize(r['ZANNOTATIONSELECTEDTEXT']) == needle]
         entry = {'kindle_annotation_id': a.annotation_id, 'color': color,
-                 'apple_style': style, 'cfi': loc.cfi, 'status': 'already_present' if hits else 'ready'}
+                 'apple_style': style, 'cfi': loc.cfi, 'note': source_note, 'status': 'already_present' if hits else 'ready'}
         entries.append(entry)
         if hits:
             if len(hits) != 1 or hits[0]['ZANNOTATIONSTYLE'] != style or bool(hits[0]['ZANNOTATIONISUNDERLINE']) != (a.dataset == 12):
                 raise ValueError('An existing Apple highlight differs; resolve its color or identity before importing')
             entry['apple_uuid'] = hits[0]['ZANNOTATIONUUID']
+            current_note = hits[0]['ZANNOTATIONNOTE'] or ''
+            if source_note and current_note and source_note != current_note:
+                entry.update(status='refused', reason='Both apps have different notes; refusing overwrite')
+            elif source_note and not current_note:
+                entry['status'] = 'ready_note'
+                notes.append((loc.cfi, source_note))
             continue
         created = a.payload.get('created_time')
         clip = Clipping(title=title, author=author, kind='Underline' if a.dataset == 12 else 'Highlight',
@@ -79,11 +111,14 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
                         added=datetime.fromtimestamp(created / 1000) if created else None, text=text)
         clip.bridge_color = color
         clips.append(clip)
+        if source_note:
+            notes.append((loc.cfi, source_note))
     report = {'schema_version': 1, 'kind': 'native_apple_highlights', 'apple_asset_id': aid,
               'kindle_book_id': kindle_id, 'entries': entries, 'write_performed': False,
-              'summary': {'ready': len(clips), 'already_present': len(entries) - len(clips)},
-              'reverse_notes_supported': False, 'device_display_verified': False}
-    if not apply or not clips:
+              'summary': {state: sum(e['status'] == state for e in entries)
+                          for state in ('ready', 'ready_note', 'already_present', 'refused')},
+              'reverse_notes_supported': True, 'device_display_verified': False}
+    if not apply or not (clips or notes) or report['summary']['refused']:
         return report
     subprocess.Popen(['osascript', '-e', 'tell application "Books" to quit'],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -96,7 +131,7 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
     with snapshot(annotations) as db:
         fresh = [dict(r) for r in db.execute(
             'SELECT ZANNOTATIONUUID,ZANNOTATIONLOCATION,ZANNOTATIONSELECTEDTEXT,ZANNOTATIONSTYLE,'
-            'ZANNOTATIONISUNDERLINE FROM ZAEANNOTATION WHERE ZANNOTATIONASSETID=? '
+            'ZANNOTATIONISUNDERLINE,ZANNOTATIONNOTE FROM ZAEANNOTATION WHERE ZANNOTATIONASSETID=? '
             'AND ZANNOTATIONTYPE=2 AND ZANNOTATIONDELETED=0', (aid,))]
     if fresh != existing:
         raise ValueError('Apple annotations changed; create a new plan')
@@ -128,7 +163,25 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False):
             namespace['main']()
     finally:
         sys.argv = old_args
-    report.update(write_performed=True, backup=str(backup), upstream_log=log.getvalue())
+    with sqlite3.connect(annotations) as db:
+        for cfi, note in notes:
+            matches = db.execute(
+                'SELECT ZANNOTATIONUUID,ZANNOTATIONNOTE FROM ZAEANNOTATION '
+                'WHERE ZANNOTATIONASSETID=? AND ZANNOTATIONLOCATION=? '
+                'AND ZANNOTATIONTYPE=2 AND ZANNOTATIONDELETED=0', (aid, cfi)).fetchall()
+            if len(matches) != 1:
+                raise ValueError('Imported highlight missing or ambiguous; notes not written')
+            uuid, old_note = matches[0]
+            if old_note and old_note != note:
+                raise ValueError('Apple note changed; refusing overwrite')
+            if old_note != note:
+                modified = time.time() - 978307200
+                db.execute('UPDATE ZAEANNOTATION SET ZANNOTATIONNOTE=?, '
+                           'ZANNOTATIONMODIFICATIONDATE=?, ZFUTUREPROOFING11=?, '
+                           'Z_OPT=COALESCE(Z_OPT,0)+1 WHERE ZANNOTATIONUUID=?',
+                           (note, modified, str(modified), uuid))
+    report.update(write_performed=True, backup=str(backup), upstream_log=log.getvalue(),
+                  inserted_rows=len(clips), notes_written=len(notes))
     opened = subprocess.run(['open', '-g', '-a', 'Books', path], capture_output=True)
     report['app_reopened'] = opened.returncode == 0
     return report
