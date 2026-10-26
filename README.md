@@ -37,6 +37,8 @@ Position conversion needs the additional tools in the [setup instructions](docs/
 - [Commands and synchronization rules](docs/usage.md)
 - [KOReader service connection](docs/kosync.md)
 - [Data handling and verification limits](docs/design.md)
+- [Highlight export](docs/highlights.md)
+- [Work plan](TODO.md)
 - [Third-party code and licenses](third_party/positions/README.md)
 
 ## Tests

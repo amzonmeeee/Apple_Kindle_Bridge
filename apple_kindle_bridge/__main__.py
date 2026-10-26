@@ -40,6 +40,11 @@ def main():
     diff = commands.add_parser("diff")
     diff.add_argument("before", type=Path)
     diff.add_argument("after", type=Path)
+    highlights = commands.add_parser("highlights-export", help="Export private Apple Books highlights and notes without reader writes")
+    highlights.add_argument("--library-db", type=Path)
+    highlights.add_argument("--annotations-db", type=Path)
+    highlights.add_argument("--asset-id")
+    highlights.add_argument("--output", type=Path, required=True)
     positions = commands.add_parser("positions", help="Resolve saved Apple CFI candidates against locally available EPUBs")
     positions.add_argument("inventory", type=Path)
     positions.add_argument("--output", type=Path, required=True)
@@ -73,7 +78,20 @@ def main():
             cmd.add_argument("--plan", type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.command in ("kosync-document", "kosync-pull"):
+        if args.command == "highlights-export":
+            from .highlights import export_highlights
+            if args.library_db:
+                library, annotations = args.library_db, args.annotations_db
+            else:
+                library, annotations = discover()
+                annotations = args.annotations_db or annotations
+            if annotations is None:
+                raise InspectionError("Supply --annotations-db or use Apple Books database discovery")
+            result = export_highlights(library.expanduser(), annotations.expanduser(), args.asset_id)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()), **result['summary']}, indent=2))
+            return 0
+        elif args.command in ("kosync-document", "kosync-pull"):
             from .kosync import document, pull
             result = (document(args.epub) if args.command == "kosync-document"
                       else pull(args.epub, args.reader_file, args.dom_version, args.server))
