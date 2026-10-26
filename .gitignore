@@ -9,6 +9,8 @@ __pycache__/
 .runtime/
 .DS_Store
 .auth/
+.env
+.env.*
 chrome-profile/
 *.epub
 *.pdf

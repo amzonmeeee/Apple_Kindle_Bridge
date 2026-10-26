@@ -53,7 +53,15 @@ def converter_cfi(raw, spine_index):
         return result
 
     if len(paths) == 1:
-        return 'epubcfi(' + prefix + tail(paths[0]) + ')'
+        # The vendored converter's point branch expects an Element but Foliate
+        # returns a Text node for these CFIs. Its Range branch supports Text.
+        # An empty range has exactly the same source position as the point.
+        point = paths[0]
+        parent = ''.join('/' + str(s.number) for s in point.steps[:-1])
+        leaf = tail(point, len(point.steps) - 1)
+        if point.offset is None:
+            leaf += ':0'
+        return 'epubcfi(' + prefix + parent + ',' + leaf + ',' + leaf + ')'
     common = 0
     while common < min(len(p.steps) for p in paths) - 1:
         if paths[0].steps[common].number != paths[1].steps[common].number:

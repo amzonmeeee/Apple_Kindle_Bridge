@@ -7,6 +7,7 @@ import sys
 import tempfile
 
 from .apple import InspectionError, compare, discover, inspect_library
+from .epub import LocationError
 
 
 def save_json(path, data):
@@ -51,9 +52,52 @@ def main():
     from_ko.add_argument("xpointer")
     from_ko.add_argument("--end-xpointer")
     from_ko.add_argument("--output", type=Path, required=True)
+    ko_file = commands.add_parser("kosync-document", help="Prepare a private EPUB copy and its KOReader binary key")
+    ko_file.add_argument("epub", type=Path)
+    ko_file.add_argument("--output", type=Path, required=True)
+    ko_pull = commands.add_parser("kosync-pull", help="Read the existing KOReader progress service and verify its position")
+    ko_pull.add_argument("epub", type=Path)
+    ko_pull.add_argument("--reader-file", type=Path, required=True)
+    ko_pull.add_argument("--dom-version", type=int, required=True)
+    ko_pull.add_argument("--server")
+    ko_pull.add_argument("--output", type=Path, required=True)
+    for name in ("sync-baseline", "sync-plan", "sync-check"):
+        cmd = commands.add_parser(name, help="Reconcile verified positions without reader writes")
+        cmd.add_argument("apple", type=Path)
+        cmd.add_argument("koreader", type=Path)
+        cmd.add_argument("--output", type=Path, required=True)
+        if name == "sync-plan":
+            cmd.add_argument("--baseline", type=Path)
+            cmd.add_argument("--prefer", choices=("apple", "koreader"))
+        elif name == "sync-check":
+            cmd.add_argument("--plan", type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.command in ("to-koreader", "from-koreader"):
+        if args.command in ("kosync-document", "kosync-pull"):
+            from .kosync import document, pull
+            result = (document(args.epub) if args.command == "kosync-document"
+                      else pull(args.epub, args.reader_file, args.dom_version, args.server))
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()),
+                              **{k: result[k] for k in ("kind", "status", "document", "reader_file") if k in result}},
+                             ensure_ascii=False, indent=2))
+            return 0 if args.command == "kosync-document" or result['status'] == 'verified_engine_source_position' else 2
+        elif args.command in ("sync-baseline", "sync-plan", "sync-check"):
+            from .sync import baseline, plan, check_plan
+            apple, koreader = json.loads(args.apple.read_text()), json.loads(args.koreader.read_text())
+            if args.command == "sync-baseline":
+                result = baseline(apple, koreader)
+            elif args.command == "sync-plan":
+                common = json.loads(args.baseline.read_text()) if args.baseline else None
+                result = plan(apple, koreader, common, args.prefer)
+            else:
+                result = check_plan(json.loads(args.plan.read_text()), apple, koreader)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()),
+                              **{k: result[k] for k in ("kind", "action", "reason", "status") if k in result}},
+                             ensure_ascii=False, indent=2))
+            return 2 if result.get("action") in ("conflict", "choose_initial_source") else 0
+        elif args.command in ("to-koreader", "from-koreader"):
             from .koreader import convert_cfi, convert_xpointer
             result = (convert_cfi(args.epub, args.cfi) if args.command == "to-koreader"
                       else convert_xpointer(args.epub, args.xpointer, args.end_xpointer))
@@ -84,7 +128,7 @@ def main():
                 result = {"sources": result["sources"], **result["summary"], "limitations": result["limitations"]}
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         return 0
-    except (InspectionError, OSError, ValueError, KeyError) as exc:
+    except (InspectionError, LocationError, OSError, ValueError, KeyError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
