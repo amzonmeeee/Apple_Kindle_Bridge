@@ -1,0 +1,62 @@
+{
+  "upstream": "seanmatheny/clippyconvert",
+  "commit": "49dd307fe6132ccdb965c4adb948d30f2287ec34",
+  "files": [
+    {
+      "path": "books2kindle.py",
+      "blob_sha": "36268514ba769a0db55bdd597cfabd6f274f232d"
+    },
+    {
+      "path": "clippy/books_export.py",
+      "blob_sha": "be232e4605d789764c3616e2062064a349dfdaaa"
+    },
+    {
+      "path": "clippy/epub_cfi.py",
+      "blob_sha": "b5d0601b11dbe73c8f4e6d71698c0755d1d6e078"
+    },
+    {
+      "path": "clippy/kfx.py",
+      "blob_sha": "7a3c7ddadc0f86c2bc4a06bf0db61f3ce8713741"
+    },
+    {
+      "path": "clippy/kfx_extract.py",
+      "blob_sha": "2d10b1da1b53d352ec0b9e87b42755563c048788"
+    },
+    {
+      "path": "clippy/kindle_annots.py",
+      "blob_sha": "809e2276bc5bdc6f47c7f28f0c2a9c9a112f46e4"
+    },
+    {
+      "path": "clippy/kindle_fetch.py",
+      "blob_sha": "ef1a2ca837eb296c8a21000846860d817e6b1b23"
+    },
+    {
+      "path": "clippy/ksdk.py",
+      "blob_sha": "65e8f2c024ed7d64b70a59cc02702509b44e520a"
+    },
+    {
+      "path": "clippy/match.py",
+      "blob_sha": "491e49ac2898b16f5696dc563fb3da9740541645"
+    },
+    {
+      "path": "clippy/mobi.py",
+      "blob_sha": "be31df9edc5071c86eaeb830758a6341bf99129c"
+    },
+    {
+      "path": "clippy/parse_clippings.py",
+      "blob_sha": "8e5bee00ed5a9f146132f341e45967a8ab8eb65b"
+    },
+    {
+      "path": "clippy/textsearch.py",
+      "blob_sha": "057cba1a54afc941bfcb14cc2010b495fc88d4fa"
+    },
+    {
+      "path": "clippy/validate.py",
+      "blob_sha": "7e930c42f98dab6ab831cafcc7f42f81d4726039"
+    },
+    {
+      "path": "kindle2books.py",
+      "blob_sha": "770f0fc5a63d72ae55e2b266d24876a8eabc8542"
+    }
+  ]
+}

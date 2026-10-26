@@ -2,9 +2,9 @@
 
 Apple Kindle Bridge reads reading positions from Apple Books on macOS.
 It converts EPUB positions between Apple Books and KOReader.
-It also prepares synchronization plans.
+It also transfers highlights through the Mac Kindle app.
 
-**The tool does not yet write positions to Apple Books or a Kindle.**
+**This is a prototype. Reading-position transfer is not yet implemented.**
 
 ## Start
 
@@ -28,7 +28,10 @@ Git excludes this directory.
 - Position conversion uses Readest, Foliate, and the actual KOReader CRengine.
 - The tool can read the existing KOReader progress service.
 - Synchronization plans keep backward reading changes and identify conflicts.
-- Kindle transfer and saved-position tests need further work.
+- Native highlight transfer works in both directions on the test book.
+- Apple-to-Kindle transfer also carries attached notes.
+- Pink highlights reached Apple Books on Mac, iPhone, and iPad.
+- Saved-position writes and physical Kindle tests need further work.
 
 Position conversion needs the additional tools in the [setup instructions](docs/setup.md).
 
@@ -37,7 +40,8 @@ Position conversion needs the additional tools in the [setup instructions](docs/
 - [Commands and synchronization rules](docs/usage.md)
 - [KOReader service connection](docs/kosync.md)
 - [Data handling and verification limits](docs/design.md)
-- [Highlight export](docs/highlights.md)
+- [Native highlight transfer and limits](docs/native-highlights.md)
+- [Highlight export and KOReader preview](docs/highlights.md)
 - [Work plan](TODO.md)
 - [Third-party code and licenses](third_party/positions/README.md)
 

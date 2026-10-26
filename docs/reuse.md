@@ -2,7 +2,8 @@
 
 Review date: 2026-10-26.
 The local `Apple_Kindle_Bridge_similar_repos.md` report supplied the candidates.
-This review checked the sources listed below. It did not run these applications.
+The initial review checked the sources listed below.
+The later native pilot ran clippyconvert with Apple Books and the Mac Kindle app.
 
 ## Highlights
 
@@ -17,17 +18,34 @@ Its [Kindle database module](https://github.com/seanmatheny/clippyconvert/blob/m
 separates the synced `server_view` from the pending `local_edit` queue.
 Its [README](https://github.com/seanmatheny/clippyconvert#reverse-direction-apple-books--kindle-app)
 describes text matching, MOBI positions, and Calibre KFX Input integration.
-Reuse those components where suitable. Do not build another MOBI or KFX parser.
-Check the upstream license before adding source files to this repository.
+The native adapter now reuses those components from a separate local checkout.
+The tracked manifest pins its revision and source hashes. No upstream code is vendored.
+No license was found at that revision. Review licensing before redistribution.
 
 Keep annotation UUIDs and explicit transfer records.
 The upstream export treats a chapter field as evidence of a native annotation.
 That heuristic is not sufficient for this bridge to prevent transfer loops.
 Fuzzy book names and repeated passages also need review before a write.
 
+The inspected [passage matcher](https://github.com/seanmatheny/clippyconvert/blob/main/clippy/textsearch.py)
+returns the first exact text match before trying approximate matches.
+Its Git blob SHA is `057cba1a54afc941bfcb14cc2010b495fc88d4fa`.
+An exact score alone does not establish a unique passage.
+For the same EPUB, the current highlight preview uses the existing CFI instead.
+It reuses Foliate selection ranges, Readest conversion, and CRengine endpoint checks.
+No new passage matcher or MOBI/KFX parser was added.
+
 The Kindle queue is an annotation route.
 It does not establish a route for writing the last reading position.
-Device and cloud propagation remain untested here.
+The original test book reached the Kindle server view after import.
+The user confirmed its highlight and note in the Mac Kindle app.
+Reverse highlights and the pink color correction reached Apple Books on all three
+Apple devices. Physical Kindle behavior remains untested.
+
+The upstream reverse writer always selects yellow for highlights.
+The adapter replaces that one expression in memory with the shared color mapping.
+Yellow, blue, and pink have exact mappings. Other colors are refused.
+See [native transfer evidence and limits](native-highlights.md).
 
 ## Reading positions
 

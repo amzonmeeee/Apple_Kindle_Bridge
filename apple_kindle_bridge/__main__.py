@@ -1,4 +1,4 @@
-"""Read-only Apple Books inventory and experimental position conversion."""
+"""Apple Books inspection, position conversion, and explicit highlight imports."""
 import argparse
 import json
 import os
@@ -29,7 +29,7 @@ def save_json(path, data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Read-only Apple Books inspection; no sync writes.")
+    parser = argparse.ArgumentParser(description="Apple Books bridge; native highlight writes require --apply.")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("inspect", "export"):
         cmd = commands.add_parser(name)
@@ -40,11 +40,27 @@ def main():
     diff = commands.add_parser("diff")
     diff.add_argument("before", type=Path)
     diff.add_argument("after", type=Path)
+    for name in ("kindle-highlights", "apple-highlights"):
+        native = commands.add_parser(name, help="Transfer one book's highlights through the native apps")
+        native.add_argument("--config", type=Path, default=Path('.runtime/native.json'))
+        native.add_argument("--asset-id", required=True)
+        native.add_argument("--kindle-book-id", required=True)
+        if name == "kindle-highlights":
+            native.add_argument("--annotation-uuid")
+        native.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+        native.add_argument("--apply", action="store_true")
+        native.add_argument("--output", type=Path, required=True)
     highlights = commands.add_parser("highlights-export", help="Export private Apple Books highlights and notes without reader writes")
     highlights.add_argument("--library-db", type=Path)
     highlights.add_argument("--annotations-db", type=Path)
     highlights.add_argument("--asset-id")
     highlights.add_argument("--output", type=Path, required=True)
+    highlight_plan = commands.add_parser("highlights-plan", help="Preview one book's highlight ranges for KOReader without reader writes")
+    highlight_plan.add_argument("export", type=Path)
+    highlight_plan.add_argument("epub", type=Path)
+    highlight_plan.add_argument("--asset-id", required=True)
+    highlight_plan.add_argument("--reader-file", type=Path, required=True)
+    highlight_plan.add_argument("--output", type=Path, required=True)
     positions = commands.add_parser("positions", help="Resolve saved Apple CFI candidates against locally available EPUBs")
     positions.add_argument("inventory", type=Path)
     positions.add_argument("--output", type=Path, required=True)
@@ -78,7 +94,30 @@ def main():
             cmd.add_argument("--plan", type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.command == "highlights-export":
+        if args.command in ("kindle-highlights", "apple-highlights"):
+            if args.output.expanduser().exists():
+                raise InspectionError("Output already exists; choose a new report name before importing")
+            if args.command == "kindle-highlights":
+                from .native_highlights import transfer
+                result = transfer(args.config, args.asset_id, args.kindle_book_id,
+                                  args.backup_dir, args.apply, args.annotation_uuid)
+            else:
+                from .native_reverse import transfer
+                result = transfer(args.config, args.asset_id, args.kindle_book_id,
+                                  args.backup_dir, args.apply)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()), **result['summary'],
+                              "write_performed": result['write_performed'],
+                              "inserted_rows": result.get('inserted_rows', 0)}, indent=2))
+            return 2 if result['summary'].get('refused') else 0
+        elif args.command == "highlights-plan":
+            from .highlight_plan import preview_highlights
+            result = preview_highlights(json.loads(args.export.read_text()), args.asset_id,
+                                        args.epub, args.reader_file)
+            save_json(args.output, result)
+            print(json.dumps({"output": str(args.output.resolve()), **result['summary']}, indent=2))
+            return 2 if result['summary']['refused'] else 0
+        elif args.command == "highlights-export":
             from .highlights import export_highlights
             if args.library_db:
                 library, annotations = args.library_db, args.annotations_db

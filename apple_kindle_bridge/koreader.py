@@ -167,7 +167,7 @@ def validate_engine_point(epub, expected, actual):
             'source_coordinate': expected}
 
 
-def convert_cfi(path, raw):
+def convert_cfi(path, raw, *, selected_text=None):
     source = resolve_cfi(path, raw)
     report = {'schema_version': 1, 'direction': 'apple_cfi_to_koreader', 'cfi_raw': raw,
               'source': source, 'reader_resume_verified': False, 'write_performed': False}
@@ -178,11 +178,21 @@ def convert_cfi(path, raw):
         points = source['endpoints']
         if any(p['kind'] != 'text' for p in points) or len({p['document'] for p in points}) != 1:
             raise LocationError('unsupported_engine_position', 'Verification currently requires text endpoints in one document')
+        if selected_text is not None:
+            if not isinstance(selected_text, str) or not selected_text.strip() or len(points) != 2:
+                raise LocationError('invalid_highlight_range', 'A highlight requires text and two CFI endpoints')
         epub = Epub(path)
         adapted = converter_cfi(raw, points[0]['spine_index'])
         converted = run_converter({'xml': epub.read(points[0]['document']).decode('utf-8'),
-                                   'spine_index': points[0]['spine_index'], 'cfi': adapted})
+                                   'spine_index': points[0]['spine_index'], 'cfi': adapted,
+                                   'inspect_range': selected_text is not None})
         report['converter_candidate'] = converted
+        if selected_text is not None:
+            expected = hashlib.sha256(selected_text.encode('utf-8')).hexdigest()
+            if converted.get('selection_sha256') != expected:
+                raise LocationError('highlight_text_mismatch', 'The CFI range does not contain the exact exported highlight text')
+            report['highlight_text_sha256'] = expected
+            report['source_selection_text_verified'] = True
         reverse = resolve_cfi(path, converted['reverse_cfi'])
         if not reverse['status'].startswith('resolved_source_') or [coordinate(p) for p in reverse['endpoints']] != [coordinate(p) for p in points]:
             raise LocationError('converter_roundtrip_mismatch', 'Converter round-trip changed source coordinates')

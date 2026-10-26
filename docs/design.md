@@ -13,7 +13,7 @@
 
 ## Apple Books data
 
-The tool opens each SQLite database with `mode=ro` and `query_only=ON`.
+Inspection opens each SQLite database with `mode=ro` and `query_only=ON`.
 It uses the SQLite backup API to create a memory snapshot.
 This includes committed write-ahead log data.
 Each snapshot must pass `quick_check`.
@@ -28,7 +28,11 @@ Type 3 annotation rows are candidate reading positions.
 The tool keeps their raw values, including absent CFIs and deletion flags.
 It does not use the newest highlight as a reading position.
 
-The tool does not export note text or highlight text.
+Position inspection does not export note text or highlight text.
+Highlight exports and native transfer reports do contain selected text and notes.
+Native transfer commands can write annotations when `--apply` is set.
+They close the target app and save a database backup before a write.
+See [native transfer](native-highlights.md) for the supported scope.
 For `ZPLUSERDATA`, it records a hash, length, and simple `BKPageLocation` values.
 It does not expand archived text context.
 
