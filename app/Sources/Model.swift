@@ -224,6 +224,11 @@ final class AppModel: ObservableObject {
             checks = [Check(id: "runtime", ok: false, warning: false, title: "內建工具",
                             detail: "工具不完整，請重新安裝：\(error.localizedDescription)", action: "install")]
         }
+        let trusted = ShareClicker.trusted
+        checks.append(Check(id: "accessibility", ok: true, warning: !trusted, title: "自動按「傳送」（選用）",
+                            detail: trusted ? "已開啟。傳書到 Kindle 時會自動按「傳送」和「確定」"
+                                            : "允許「輔助使用」後，傳書到 Kindle 時會自動按「傳送」和「確定」。打開後請重新開啟 App",
+                            action: trusted ? nil : "accessibility"))
     }
 
     static func checkTitle(_ raw: [String: Any]) -> String {
@@ -262,6 +267,9 @@ final class AppModel: ObservableObject {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")!)
         case "install_kindle":
             NSWorkspace.shared.open(URL(string: "macappstore://apps.apple.com/app/id405399194")!)
+        case "accessibility":
+            ShareClicker.requestAccess()
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility")!)
         case "open_kindle":
             NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Amazon Kindle.app"))
         default: break
@@ -362,7 +370,7 @@ final class AppModel: ObservableObject {
             var lines: [String] = []
             if !outcome.sent.isEmpty { lines.append("已送出 \(outcome.sent.count) 本。書出現在 Kindle for Mac 後，請在 Kindle 裡下載，App 會自動配對。") }
             if !outcome.failed.isEmpty { lines.append("\(outcome.failed.count) 本取消或失敗：\(outcome.failed.map { $0.deletingPathExtension().lastPathComponent }.joined(separator: "、"))") }
-            if !large.isEmpty { lines.append("超過 200MB 未傳送：\(large.joined(separator: "、"))") }
+            if !large.isEmpty { lines.append("超過 50MB 未傳送（Send to Kindle 的上限）：\(large.joined(separator: "、"))") }
             if !lines.isEmpty { notice = lines.joined(separator: "\n") }
         }
         await refreshLibrary()

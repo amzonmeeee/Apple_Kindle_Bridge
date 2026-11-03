@@ -48,8 +48,10 @@ columns they use. An untested Kindle version shows a warning in onboarding.
 
 ## Import
 
-- Apple Books to Kindle: the app zips Apple's EPUB folders and hands them to the
-  system Send to Kindle share service. Confirm the Send to Kindle window. Then
+- Apple Books to Kindle: the app zips Apple's EPUB folders and hands them, one at a time, to the
+  system Send to Kindle share service. With Accessibility access the app presses
+  Send and the confirmation itself; otherwise confirm each window. Files over
+  50 MB are skipped (a 158 MB EPUB was refused). Then
   download the book in Kindle for Mac; the app pairs it.
 - Kindle to Apple Books: downloaded personal documents are converted from KFX to
   EPUB with Calibre and KFX Input, then opened in Apple Books.

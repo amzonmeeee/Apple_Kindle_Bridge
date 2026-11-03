@@ -74,8 +74,13 @@ def apple_books():
         path = info.get('path')
         entry = {'id': row['ZASSETID'], 'title': row['ZTITLE'], 'author': row['ZAUTHOR'] or '',
                  'path': path, 'store': bool(row['ZSTOREID'])}
-        if not path or not str(path).lower().endswith('.epub'):
-            entry['kind'], entry['reason'] = 'unsupported', 'Not an EPUB (PDF or audiobook)'
+        suffix = Path(str(path)).suffix.lower() if path else ''
+        if not path:
+            # Store books that are not downloaded have no file; they carry DRM anyway.
+            entry['kind'], entry['reason'] = ('protected', 'Apple Books Store purchase with DRM') if row['ZSTOREID'] \
+                else ('not_downloaded', 'Download it in Apple Books first')
+        elif suffix != '.epub':
+            entry['kind'], entry['reason'] = 'unsupported', 'PDF' if suffix == '.pdf' else 'Not an EPUB'
         elif info['status'] == 'missing':
             entry['kind'], entry['reason'] = 'not_downloaded', 'Download it in Apple Books first'
         elif row['ZSTOREID'] or protected_epub(path):

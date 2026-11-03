@@ -86,7 +86,7 @@ struct OnboardingView: View {
                         if let detail = check.detail { Text(detail).font(.callout).foregroundStyle(.secondary) }
                     }
                     Spacer()
-                    if !check.ok, let action = check.action {
+                    if !check.ok || check.warning, let action = check.action {
                         Button(Self.actionTitle(action)) { Task { await model.perform(action: action) } }
                     }
                 }
@@ -112,6 +112,7 @@ struct OnboardingView: View {
         case "full_disk_access": return "打開系統設定"
         case "install_kindle": return "前往 App Store"
         case "open_kindle": return "打開 Kindle"
+        case "accessibility": return "允許"
         default: return action
         }
     }
@@ -404,7 +405,13 @@ struct LibraryView: View {
 
     var appleBooks: [Book] { model.appleOnly.filter { $0.kind == "transferable" } }
     var kindleBooks: [Book] { model.kindleOnly.filter { $0.kind == "transferable" } }
-    var unavailable: [Book] { model.appleOnly.filter { $0.kind != "transferable" } + model.kindleOnly.filter { $0.kind != "transferable" } + model.protected }
+    /// Store editions and re-downloads can repeat a title; show each title and reason once.
+    var unavailable: [Book] {
+        var seen = Set<String>()
+        let all = model.appleOnly.filter { $0.kind != "transferable" } + model.kindleOnly.filter { $0.kind != "transferable" } + model.protected
+        return all.filter { seen.insert($0.title + "|" + Self.reason($0)).inserted }
+            .sorted { (Self.reason($0), $0.title) < (Self.reason($1), $1.title) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -454,7 +461,7 @@ struct LibraryView: View {
         switch book.kind {
         case "protected": return book.side == "kindle" ? "Kindle 商店購買（DRM）" : "Apple Books 商店購買（DRM）"
         case "not_downloaded": return book.side == "kindle" ? "請先在 Kindle for Mac 下載" : "請先在 Apple Books 下載"
-        case "unsupported": return book.side == "kindle" ? "不是 KFX 格式" : "不是 EPUB（PDF 或有聲書）"
+        case "unsupported": return book.side == "kindle" ? "不是 KFX 格式" : (book.reason ?? "不是 EPUB")
         default: return book.reason ?? ""
         }
     }
