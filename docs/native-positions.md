@@ -52,9 +52,8 @@ the target EPUB fingerprint, source coordinates, and engine version.
   both Mac apps and the Apple mobile devices. Reverse transfer used the position
   actually saved by Kindle. Three within-paragraph offsets passed conversion
   round trips, and equivalent page-range and point CFIs caused no repeat write.
-- Physical Kindle resume, Whispersync behavior, and firmware compatibility remain
-  device acceptance tasks. In particular, do not assume the cloud will apply a
-  backward move just because the Mac app does.
+- Physical Kindle results apply to the tested device and firmware only.
+  See [device results](#device-results).
 - The existing KOReader progress-service command is still read-only. Native Mac
   position writes do not implement KOReader device writes.
 
@@ -67,6 +66,29 @@ remain present. Keep the distinction between current position and furthest progr
 
 A failed device check must remain a recorded limitation. Do not advance a common
 synchronization baseline merely because a local write or conversion succeeded.
+
+## Device results
+
+Tested on 2026-11-03 with a stock Kindle Paperwhite 5 (firmware 5.19.2) and
+Mac Kindle 7.70.1. The EPUBs were sent through Send to Kindle.
+
+- Highlights, colors, and notes written on the Mac appeared on the device.
+- Forward: a device position reached Mac Kindle as a "Go to most recent page"
+  prompt. The bridge then wrote it to Apple Books.
+- Backward: an Apple position written to Mac Kindle reached the device as
+  "From page 3 to 1". It landed correctly and stayed after reopening.
+- Offline: the device kept its offline position after reconnecting. It showed
+  "From page 61 to 171" for the newer Mac position and moved only after the user
+  accepted. The cloud never replaced the device position without the prompt.
+- A six-page test book showed no prompt for a small offline difference. Use a
+  longer book for conflict checks.
+- Mac Kindle stores the start of the displayed page when it reopens a book, so
+  a written position can shift slightly within that page.
+- Let each side finish syncing before the next step.
+- Apple Books keeps imported EPUBs as directory bundles. Zip the bundle with
+  `mimetype` first and stored before using Send to Kindle.
+
+Full private evidence: `state/kpw5-acceptance-20261103.json`.
 
 ## Pilot cleanup
 

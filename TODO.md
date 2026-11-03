@@ -23,14 +23,22 @@ They are not completed synchronization features.
   Confirm the backward Apple position on the user's mobile devices.
 - [x] Remove temporary tools. Move the test app and its new main container to Trash.
 
-## Next: physical Kindle acceptance
+## Physical Kindle acceptance (2026-11-03)
 
-- [ ] Confirm the model and firmware, then test the existing cloud book on the device.
-- [ ] Verify highlights, colors, and notes on the physical Kindle.
-- [ ] Verify forward and backward positions through Whispersync, then close and reopen.
-- [ ] Verify offline reading and reconnect. Record how competing device changes behave.
+Device: Kindle Paperwhite 5 8GB, firmware 5.19.2, stock (no jailbreak, no KOReader).
 
-These are hardware acceptance gates, not a promise of stock Kindle compatibility.
+- [x] Confirm the model and firmware, then test a cloud book on the device.
+- [x] Verify highlights, colors, and notes on the physical Kindle.
+- [x] Verify forward and backward positions through Whispersync, then close and reopen.
+- [x] Verify offline reading and reconnect. Record how competing device changes behave.
+  Tested on a long book; see [device results](docs/native-positions.md#device-results).
+
+## Next
+
+- [ ] Decide whether to keep the native runtime installed or remove it again.
+- [ ] Try one personal book with existing highlights before wider use.
+
+These results cover one device, firmware, and Mac app version.
 The current implementation is a manual, one-book native Mac transfer.
 KOReader device writes and unattended conflict resolution are not implemented.
 See [supported position scope](docs/native-positions.md).
