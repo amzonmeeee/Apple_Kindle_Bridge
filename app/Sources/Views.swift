@@ -30,7 +30,8 @@ struct RootView: View {
             case .main: MainView()
             }
             if let busy = model.busy {
-                BusyOverlay(title: busy, detail: model.detail)
+                BusyOverlay(title: busy, detail: model.detail,
+                            skip: model.sharing ? { model.share.skipCurrent() } : nil)
             }
         }
         .alert("發生錯誤", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
@@ -45,6 +46,7 @@ struct RootView: View {
 struct BusyOverlay: View {
     let title: String
     let detail: String?
+    var skip: (() -> Void)? = nil
 
     var body: some View {
         ZStack {
@@ -53,6 +55,9 @@ struct BusyOverlay: View {
                 ProgressView()
                 Text(title).font(.headline)
                 if let detail { Text(detail).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
+                if let skip {
+                    Button("略過這本", action: skip).padding(.top, 4)
+                }
             }
             .padding(24)
             .frame(minWidth: 280)

@@ -168,6 +168,7 @@ final class AppModel: ObservableObject {
     @Published var detail: String?
     @Published var error: String?
     @Published var notice: String?
+    @Published var sharing = false
 
     private let defaults = UserDefaults.standard
     var onboarded: Bool {
@@ -325,29 +326,44 @@ final class AppModel: ObservableObject {
         await refreshAll()
     }
 
-    /// The Send to Kindle share extension. Its title is localized and can be
-    /// upper case, such as "上傳至 KINDLE", so match without case.
-    static func kindleShareService(for urls: [URL]) -> NSSharingService? {
-        NSSharingService.sharingServices(forItems: urls).first { $0.title.range(of: "kindle", options: .caseInsensitive) != nil }
-    }
+    let share = KindleShare()
 
     func sendToKindle(_ books: [Book]) async {
         guard !books.isEmpty else { return }
+        var outcome = KindleShare.Outcome()
+        var large: [String] = []
         await work("正在準備檔案") {
             let result = try await Backend.call(["package-for-kindle"] + books.map(\.id)) as? [String: Any] ?? [:]
             let files = (result["files"] as? [[String: Any]] ?? [])
-            let large = files.filter { $0["too_large"] as? Bool ?? false }.compactMap { $0["title"] as? String }
+            large = files.filter { $0["too_large"] as? Bool ?? false }.compactMap { $0["title"] as? String }
             let urls = files.filter { !($0["too_large"] as? Bool ?? false) }.compactMap { ($0["path"] as? String).map(URL.init(fileURLWithPath:)) }
-            if !large.isEmpty { notice = "超過 200MB，Send to Kindle 不接受：\(large.joined(separator: "、"))" }
+            let ids = Dictionary(uniqueKeysWithValues: files.compactMap { f -> (String, String)? in
+                guard let path = f["path"] as? String, let id = f["apple_id"] as? String else { return nil }
+                return (path, id)
+            })
+            let skipped = files.filter { $0["too_large"] as? Bool ?? false }.compactMap { $0["apple_id"] as? String }
+            if !skipped.isEmpty { _ = try? await Backend.call(["forget-pending"] + skipped) }
             guard !urls.isEmpty else { return }
-            guard let service = Self.kindleShareService(for: urls) else {
+            busy = "正在傳送到 Kindle"
+            sharing = true
+            defer { sharing = false }
+            do {
+                outcome = try await share.send(urls) { index, total, url in
+                    self.detail = "\(index)/\(total)  \(url.deletingPathExtension().lastPathComponent)。請在 Send to Kindle 視窗按「傳送」"
+                }
+            } catch {
                 _ = try? await Backend.call(["forget-pending"] + books.map(\.id))
-                throw Backend.Failure(message: "找不到「Send to Kindle」分享功能，請確認 Kindle for Mac 已安裝並登入")
+                throw error
             }
-            service.perform(withItems: urls)
+            let failed = outcome.failed.compactMap { ids[$0.path] }
+            if !failed.isEmpty { _ = try? await Backend.call(["forget-pending"] + failed) }
         }
-        if error == nil && notice == nil {
-            notice = "已交給 Send to Kindle。書出現在 Kindle for Mac 後，請在 Kindle 裡下載它，App 會自動配對。"
+        if error == nil {
+            var lines: [String] = []
+            if !outcome.sent.isEmpty { lines.append("已送出 \(outcome.sent.count) 本。書出現在 Kindle for Mac 後，請在 Kindle 裡下載，App 會自動配對。") }
+            if !outcome.failed.isEmpty { lines.append("\(outcome.failed.count) 本取消或失敗：\(outcome.failed.map { $0.deletingPathExtension().lastPathComponent }.joined(separator: "、"))") }
+            if !large.isEmpty { lines.append("超過 200MB 未傳送：\(large.joined(separator: "、"))") }
+            if !lines.isEmpty { notice = lines.joined(separator: "\n") }
         }
         await refreshLibrary()
     }
@@ -366,10 +382,19 @@ final class AppModel: ObservableObject {
             for url in urls { _ = try? await NSWorkspace.shared.open([url], withApplicationAt: URL(fileURLWithPath: "/System/Applications/Books.app"), configuration: NSWorkspace.OpenConfiguration()) }
         }
         if toKindle {
-            if let service = Self.kindleShareService(for: urls) {
-                service.perform(withItems: urls)
-            } else {
-                error = "找不到「Send to Kindle」分享功能"
+            sharing = true
+            defer { sharing = false }
+            do {
+                let outcome = try await share.send(urls) { index, total, url in
+                    self.busy = "正在傳送到 Kindle"
+                    self.detail = "\(index)/\(total)  \(url.lastPathComponent)"
+                }
+                busy = nil; detail = nil
+                if !outcome.failed.isEmpty { error = "\(outcome.failed.count) 本取消或傳送失敗" }
+            } catch {
+                busy = nil; detail = nil
+                self.error = error.localizedDescription
+                return
             }
         }
         notice = "已送出。兩邊都出現同一本書後，App 會依書名自動配對。"
