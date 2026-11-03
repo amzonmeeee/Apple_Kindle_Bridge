@@ -19,7 +19,9 @@ PROTECTED_MARKERS = ('META-INF/sinf.xml', 'META-INF/encryption.xml', 'META-INF/r
 
 
 def norm_title(title):
-    text = unicodedata.normalize('NFKC', title or '').casefold()
+    # Send to Kindle fills the title from the file name, extension included.
+    title = re.sub(r'\.(epub|pdf)$', '', (title or '').strip(), flags=re.I)
+    text = unicodedata.normalize('NFKC', title).casefold()
     text = re.sub(r'[《》「」『』“”"\'’‘:：\-—_.,，。!！?？()（）\[\]【】\s]+', '', text)
     return text
 
@@ -151,6 +153,14 @@ def overview(modules):
             pairs.append({'apple_asset_id': candidates[0]['id'], 'kindle_book_id': match[0]['id'], 'method': 'title'})
             paired_apple.add(candidates[0]['id'])
             paired_kindle.add(match[0]['id'])
+    # A PDF sent to Kindle appears there as a book of its own. It is never synced,
+    # so mark the Apple PDF as sent and hide the Kindle copy.
+    pdf_titles = {norm_title(b['title']): b for b in apple if b['kind'] == 'send_only'}
+    for k in kindle:
+        a = pdf_titles.get(norm_title(k['title']))
+        if a and k['id'] not in paired_kindle:
+            a['on_kindle'] = True
+            paired_kindle.add(k['id'])
     result = {'pairs': [], 'apple_only': [], 'kindle_only': [], 'protected': []}
     for p in pairs:
         a, k = apple_by_id[p['apple_asset_id']], kindle_by_id[p['kindle_book_id']]

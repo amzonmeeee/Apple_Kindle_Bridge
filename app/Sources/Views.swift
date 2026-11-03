@@ -195,7 +195,10 @@ struct BookChecklist: View {
                     VStack(alignment: .leading) {
                         Text(book.title).lineLimit(1)
                         HStack(spacing: 6) {
-                            if book.kind == "send_only" { Text("PDF・只傳送，不同步").font(.caption).foregroundStyle(.orange) }
+                            if book.kind == "send_only" {
+                                Text(book.onKindle ? "PDF・已在 Kindle" : "PDF・只傳送，不同步").font(.caption)
+                                    .foregroundStyle(book.onKindle ? .green : .orange)
+                            }
                             if book.pending {
                                 Text("等待配對").font(.caption).foregroundStyle(.blue)
                                 Button("取消等待") { Task { await model.forgetPending(book) } }
@@ -392,6 +395,10 @@ struct ChangeRow: View {
             Toggle("", isOn: $change.selected).labelsHidden().disabled(!change.available)
             VStack(alignment: .leading, spacing: 3) {
                 Text(change.summary).font(.callout.bold())
+                if change.raw["standalone_note"] as? Bool ?? false {
+                    Text("Kindle 上沒有畫線的筆記。Apple Books 會把它所在的句子畫線，再附上筆記。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("「\(change.text)」").font(.callout).lineLimit(3)
                 if let a = change.valueText("apple_value") { Text("Apple Books：\(a)").font(.caption).foregroundStyle(.secondary) }
                 if let k = change.valueText("kindle_value") { Text("Kindle：\(k)").font(.caption).foregroundStyle(.secondary) }

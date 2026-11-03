@@ -33,6 +33,44 @@ def attached_note(highlight, annotations, offset):
     return note
 
 
+SENTENCE_END = set('.!?。！？…\n')
+
+
+def standalone_notes(annotations, offset):
+    """Kindle notes made without a highlight. They have no owner at their position."""
+    ends = {a.end + offset for a in annotations if a.dataset in (1, 12)}
+    return [a for a in annotations if a.dataset == 3 and a.start == a.end and a.start not in ends]
+
+
+def note_sentence(reader, position):
+    """The sentence that ends at a note position, as an inclusive Kindle range."""
+    import bisect
+    end_index = bisect.bisect_right(reader.pos, position) - 1
+    if end_index < 0:
+        raise ValueError('Note position is outside the book text')
+    index = end_index
+    while index > 0 and end_index - index < 400 and reader.stripped[index - 1] not in SENTENCE_END:
+        index -= 1
+    while index < end_index and reader.stripped[index].isspace():
+        index += 1
+    return reader.pos[index], reader.pos[end_index]
+
+
+class NoteAnchor:
+    """A Kindle note without a highlight, shown in Apple Books as a highlighted sentence."""
+
+    def __init__(self, note, reader):
+        metadata = note.payload.get('json_metadata', {})
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+        self.annotation_id = note.annotation_id
+        self.dataset = 1
+        self.start, self.end = note_sentence(reader, note.start)
+        self.payload = {'json_metadata': {'mchl_color': 'yellow'}, 'created_time': note.payload.get('created_time')}
+        self.standalone_note = (metadata.get('note_text') or '').strip() or None
+        self.source = note.source
+
+
 def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_id=None):
     cfg, modules = runtime(config)
     from clippy.parse_clippings import Clipping
@@ -59,7 +97,10 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_id
         raise ValueError('Parsed positions differ from the Kindle app position space')
     synced = [a for a in ksdk.load_existing_annotations(ksdk.find_ksdk_db(), book.dataset_id)
               if a.source == 'server_view']
+    capture_offset = json.loads(Path(cfg['capture']).expanduser().read_text()).get('note_offset')
     source = [a for a in synced if a.dataset in (1, 12)]
+    if type(capture_offset) is int:
+        source += [NoteAnchor(n, reader) for n in standalone_notes(synced, capture_offset)]
     if annotation_id:
         wanted = {annotation_id} if isinstance(annotation_id, str) else set(annotation_id)
         source = [a for a in source if a.annotation_id in wanted]
@@ -81,7 +122,7 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_id
         if isinstance(metadata, str):
             metadata = json.loads(metadata)
         color = metadata.get('mchl_color')
-        source_note = attached_note(a, synced, note_offset)
+        source_note = a.standalone_note if isinstance(a, NoteAnchor) else attached_note(a, synced, note_offset)
         style = apple_style(color, a.dataset == 12)
         text = reader.extract_text(a.start, a.end).strip()
         needle = normalize(text)

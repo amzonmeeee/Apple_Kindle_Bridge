@@ -14,7 +14,7 @@ from .apple import snapshot
 from .apple_position import bookmark, selected_book
 from .koreader import source_text
 from .epub import Epub
-from .native_reverse import attached_note
+from .native_reverse import NoteAnchor, attached_note, standalone_notes
 
 CORE_DATA_EPOCH = 978307200
 # Mac Kindle stores the start of the displayed page when it reopens a book.
@@ -75,13 +75,17 @@ class Book:
 
 
 def apple_excerpt(path, verified, length=80):
+    from .native_position import codepoint_offset, context_candidates
     point = verified['source']['endpoints'][0]
     epub = Epub(path)
     try:
         text = source_text(epub, point)
+        offset = codepoint_offset(text, point['utf16_offset'])
+        for text, offset in context_candidates(epub, point, text, offset):
+            if len(text) - offset >= 20:
+                break
     finally:
         epub.close()
-    offset = len(text.encode('utf-16-le')[:point['utf16_offset'] * 2].decode('utf-16-le', 'ignore'))
     return text[offset:offset + length].strip()
 
 
@@ -92,7 +96,8 @@ def position_status(book, baseline):
     with snapshot(book.kindle_db) as db:
         row = db.execute('SELECT ZRAWCURRENTPOSITION,ZRAWLASTACCESSTIME FROM ZBOOK WHERE ZBOOKID=?',
                          ('A:' + book.kindle_id + '-0',)).fetchone()
-    kindle_pos, kindle_time = row[0], row[1]
+    # A Kindle book that was never opened has no saved position yet.
+    kindle_pos, kindle_time = (row[0] or 0) if row else 0, row[1] if row else None
     apple_cfi = apple['ZANNOTATIONLOCATION']
     apple_time = (apple['ZANNOTATIONMODIFICATIONDATE'] or 0) + CORE_DATA_EPOCH
     apple_as_kindle, verified = apple_to_kindle(book.epub_path, apple_cfi, book.reader, book.modules)
@@ -174,6 +179,16 @@ def kindle_highlights(book, note_offset):
             'color': metadata.get('mchl_color'), 'underline': a.dataset == 12,
             'note': clean_note(note), 'updated': times.get(a.annotation_id, 0) / 1000,
             'pending_upload': a.source == 'local_edit'}
+    for note in standalone_notes(annotations, note_offset):
+        if note.annotation_id in found:
+            continue
+        anchor = NoteAnchor(note, book.reader)
+        text = book.reader.extract_text(anchor.start, anchor.end).strip()
+        found[note.annotation_id] = {
+            'id': note.annotation_id, 'text': text, 'key': book.normalize(text), 'color': 'yellow',
+            'underline': False, 'note': clean_note(anchor.standalone_note),
+            'updated': times.get(note.annotation_id, 0) / 1000, 'pending_upload': note.source == 'local_edit',
+            'standalone_note': True}
     return found
 
 
@@ -215,7 +230,7 @@ def highlight_changes(book, baseline, note_offset):
                            supported=newer == 'apple', default_target=newer)
                 continue
             if not a['deleted'] and a['key']:
-                change('add', a, 'kindle', apple_ids=[a['id']])
+                change('add', a, 'kindle', apple_ids=[a['id']], apple_value=content(a))
             continue
         matched_kindle.add(link['kindle'])
         a_changed = a['deleted'] or content(a) != link['apple_value']
@@ -246,7 +261,8 @@ def highlight_changes(book, baseline, note_offset):
         if k['id'] in matched_kindle or k['id'] in linked_kindle:
             continue
         if k['key']:
-            change('add', k, 'apple', kindle_ids=[k['id']])
+            change('add', k, 'apple', kindle_ids=[k['id']], kindle_value=content(k),
+                   standalone_note=k.get('standalone_note', False))
     for k_id in linked_kindle - set(kindle):
         pass  # handled above through the Apple side of the link
     return changes, apple, kindle
@@ -274,8 +290,12 @@ def pair_status(modules, cfg, apple_id, kindle_id):
     except ValueError as exc:
         result['highlights'] = {'state': 'error', 'error': str(exc), 'changes': []}
     position_dirty = result['position'].get('state') in ('changed', 'conflict')
+    changes = bool(result['highlights']['changes'])
     errors = result['position'].get('state') == 'error' or result['highlights'].get('state') == 'error'
-    result['state'] = ('error' if errors else 'needs_sync' if position_dirty or result['highlights']['changes']
+    # A problem on one side does not block the other: highlights can sync while a
+    # position cannot be mapped, and the reverse.
+    result['state'] = ('needs_sync' if position_dirty or changes
+                       else 'error' if errors
                        else 'waiting_cloud' if result['highlights'].get('pending_upload') else 'synced')
     return result
 

@@ -181,7 +181,11 @@ def status(only=None):
             entry = {'apple_id': apple_id, 'kindle_id': kindle_id, 'state': 'unavailable', 'error': pair['reason']}
         else:
             emit(event='checking', title=pair['apple']['title'])
-            entry = sync_status.pair_status(modules, cfg, apple_id, kindle_id)
+            try:
+                entry = sync_status.pair_status(modules, cfg, apple_id, kindle_id)
+            except Exception as exc:  # one book must not hide the others
+                entry = {'apple_id': apple_id, 'kindle_id': kindle_id, 'state': 'error',
+                         'error': f'{type(exc).__name__}: {exc}'}
         entry['title'] = pair['apple']['title']
         entry['author'] = pair['apple']['author']
         results.append(entry)

@@ -15,6 +15,7 @@ from . import paths
 from .apple import snapshot
 from .apple_position import bookmark, selected_book, transfer as write_apple
 from .epub import Epub
+from .epub import xml
 from .koreader import convert_cfi, source_text
 from .native_highlights import runtime
 
@@ -40,6 +41,43 @@ def codepoint_offset(text, utf16_offset):
     return len(prefix)
 
 
+def text_pieces(element, target):
+    """Concatenate an element's text in document order; return it and the target's start."""
+    pieces, found = [], None
+
+    def walk(node):
+        nonlocal found
+        if (node, 'text') == target:
+            found = sum(map(len, pieces))
+        pieces.append(node.text or '')
+        for child in node:
+            walk(child)
+            if (child, 'tail') == target:
+                found = sum(map(len, pieces))
+            pieces.append(child.tail or '')
+    walk(element)
+    return ''.join(pieces), found
+
+
+def context_candidates(epub, point, text, offset):
+    """The text node itself, then its enclosing elements, nearest first.
+
+    A short node such as a drop cap ("C") is not unique in the Kindle text, but
+    its paragraph is.
+    """
+    yield text, offset
+    chain = [xml(epub.read(point['document']))]
+    for step in point['cfi_steps'][:-1]:
+        chain.append(list(chain[-1])[step // 2 - 1])
+    slot = (point['cfi_steps'][-1] - 1) // 2
+    owner = chain[-1]
+    target = (owner, 'text') if slot == 0 else (list(owner)[slot - 1], 'tail')
+    for ancestor in reversed(chain[-4:]):
+        full, start = text_pieces(ancestor, target)
+        if start is not None:
+            yield full, start + offset
+
+
 def apple_to_kindle(path, cfi, reader, modules):
     verified = convert_cfi(path, cfi)
     if verified['status'] != 'verified_engine_source_position':
@@ -47,11 +85,17 @@ def apple_to_kindle(path, cfi, reader, modules):
     point = verified['source']['endpoints'][0]
     epub = Epub(path)
     try:
-        text = source_text(epub, point)
+        node_text = source_text(epub, point)
+        node_offset = codepoint_offset(node_text, point['utf16_offset'])
+        candidates = list(context_candidates(epub, point, node_text, node_offset))
     finally:
         epub.close()
-    offset = codepoint_offset(text, point['utf16_offset'])
-    norm, mapping = modules['epub_cfi'].normalize_with_map(text)
+    for text, offset in candidates:
+        norm, mapping = modules['epub_cfi'].normalize_with_map(text)
+        if norm and reader.norm_text.count(norm) == 1:
+            break
+    else:
+        raise ValueError('The resume passage is absent or ambiguous')
     start = unique_start(reader.norm_text, norm)
     local = exact_index(mapping, offset)
     raw_index = reader.norm_map[start + local]

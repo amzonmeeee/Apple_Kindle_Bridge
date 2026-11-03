@@ -19,6 +19,7 @@ struct Book: Identifiable, Hashable {
     let side: String
     let pending: Bool
     let sizeMB: Double?
+    let onKindle: Bool
 
     /// EPUBs can be paired and synced. PDFs can only be sent.
     var sendable: Bool { kind == "transferable" || kind == "send_only" }
@@ -308,7 +309,8 @@ final class AppModel: ObservableObject {
                          author: raw["author"] as? String ?? "", kind: raw["kind"] as? String ?? "",
                          reason: raw["reason"] as? String, side: raw["side"] as? String ?? side,
                          pending: raw["pending_import"] != nil,
-                         sizeMB: (raw["size"] as? Double).map { $0 / 1_048_576 } ?? (raw["size"] as? Int).map { Double($0) / 1_048_576 })
+                         sizeMB: (raw["size"] as? Double).map { $0 / 1_048_576 } ?? (raw["size"] as? Int).map { Double($0) / 1_048_576 },
+                         onKindle: raw["on_kindle"] as? Bool ?? false)
                 }
             }
             appleOnly = books("apple_only", side: "apple").sorted { $0.title < $1.title }
