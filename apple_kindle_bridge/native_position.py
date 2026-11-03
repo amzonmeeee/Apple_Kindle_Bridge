@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 
+from . import paths
 from .apple import snapshot
 from .apple_position import bookmark, selected_book, transfer as write_apple
 from .epub import Epub
@@ -172,10 +173,7 @@ def transfer(config, asset_id, kindle_id, direction, backup_dir, apply=False):
             path, _ = selected_book(asset_id)
             report['app_reopened'] = subprocess.run(['open', '-g', '-a', 'Books', path], capture_output=True).returncode == 0
         return report
-    import plistlib
-    version = plistlib.loads((Path(cfg['kindle_app']) / 'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']
-    if version != '7.70.1':
-        raise ValueError('Native resume writes require revalidation for this Kindle version')
+    report.update(paths.kindle_compatibility(cfg['kindle_app'], {'ZBOOK': dbpath}))
     if report['proposed_position'] == report['observed_kindle']['ZRAWCURRENTPOSITION']:
         report['status'] = 'already_present'
         report['app_reopened'] = subprocess.run(['open', '-g', '-a', cfg['kindle_app']], capture_output=True).returncode == 0

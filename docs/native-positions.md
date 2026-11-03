@@ -38,7 +38,8 @@ the target EPUB fingerprint, source coordinates, and engine version.
 
 ## Scope and limits
 
-- Kindle writes are gated to the tested Mac app version, 7.70.1.
+- Kindle writes check the database columns they use. Version 7.70.1 is tested;
+  other versions show a warning.
 - Only downloaded cloud KFX books are accepted by the native position command.
 - Apple needs one active CFI reading bookmark without archived page data.
 - Apple current and furthest fractions are not copied from Kindle or used to

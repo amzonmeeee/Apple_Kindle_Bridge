@@ -9,13 +9,13 @@ import importlib
 import json
 import os
 from pathlib import Path
-import plistlib
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
 
+from . import paths
 from .apple import snapshot
 from .annotation_colors import kindle_color
 
@@ -55,7 +55,8 @@ def prepare(cfg, modules, asset_id, kindle_id, annotation_uuid=None):
     book = selected[0]
     source = modules['books_export'].load_books_highlights(asset_id)
     if annotation_uuid:
-        source = [h for h in source if h.uuid == annotation_uuid]
+        wanted = {annotation_uuid} if isinstance(annotation_uuid, str) else set(annotation_uuid)
+        source = [h for h in source if h.uuid in wanted]
     if not source or any(not h.uuid for h in source) or max(Counter(h.uuid for h in source).values()) > 1:
         raise ValueError('Source selection is empty or has missing or duplicate UUIDs')
     reader = modules['kindle_annots'].open_book(book)
@@ -138,9 +139,9 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_uu
     report, rows, db, capture = prepare(cfg, modules, asset_id, kindle_id, annotation_uuid)
     if not apply or not rows or report['summary']['refused']:
         return report
-    info = plistlib.loads((Path(cfg['kindle_app']) / 'Contents/Info.plist').read_bytes())
-    if info.get('CFBundleShortVersionString') != capture['kindle_version']:
-        raise ValueError('Kindle version changed; capture its native edit format again before writing')
+    # An untested Kindle version is reported, not refused. The app checks that
+    # the local edit queue drains after the write, which shows the server took it.
+    compatibility = paths.kindle_compatibility(cfg['kindle_app'], {'local_edit': db})
     if not isinstance(capture.get('note_offset'), int):
         raise ValueError('A native note offset capture is required')
     subprocess.Popen(['osascript', '-e', 'tell application "Amazon Kindle" to quit'],
@@ -162,6 +163,7 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_uu
         with sqlite3.connect(backup) as destination:
             source.backup(destination)
     report['inserted_rows'] = modules['ksdk'].insert_local_edits(str(db), rows, capture)
+    report.update(compatibility, capture_version=capture.get('kindle_version'))
     report.update(write_performed=True, backup=str(backup), transport_status='queued')
     # A completed database write is reported even if Launch Services cannot open the app.
     opened = subprocess.run(['open', '-a', cfg['kindle_app']], capture_output=True)

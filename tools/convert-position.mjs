@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { stripTypeScriptTypes } from 'node:module';
-import { JSDOM } from '../.runtime/node/node_modules/jsdom/lib/api.js';
+const { JSDOM } = await import(process.env.AKB_JSDOM ||
+  new URL('../.runtime/node/node_modules/jsdom/lib/api.js', import.meta.url).href);
 
 const sourceURL = new URL('../third_party/positions/xcfi.ts', import.meta.url);
 const cfiURL = new URL('../third_party/positions/epubcfi.mjs', import.meta.url);

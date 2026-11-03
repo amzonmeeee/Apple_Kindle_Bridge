@@ -61,7 +61,8 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_id
               if a.source == 'server_view']
     source = [a for a in synced if a.dataset in (1, 12)]
     if annotation_id:
-        source = [a for a in source if a.annotation_id == annotation_id]
+        wanted = {annotation_id} if isinstance(annotation_id, str) else set(annotation_id)
+        source = [a for a in source if a.annotation_id in wanted]
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     note_offset = capture.get('note_offset')
     if type(note_offset) is not int:

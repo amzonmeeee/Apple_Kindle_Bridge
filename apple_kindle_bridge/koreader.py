@@ -11,11 +11,12 @@ import subprocess
 import tempfile
 import zipfile
 
+from . import paths
 from .epub import Epub, LocationError, parse_cfi, require_local, resolve_cfi, xml
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / '.runtime'
-PROBE = RUNTIME / 'crengine-probe'
+RUNTIME = paths.runtime_dir()
+PROBE = paths.probe_binary()
 ENGINE_COMMIT = 'f335f7a97e240f505bb8a0dfb721fcb7912a7824'
 
 
@@ -118,9 +119,13 @@ def package_epub(epub):
 
 
 def run_converter(request):
-    proc = subprocess.run(['node', '--disable-warning=ExperimentalWarning',
+    env = dict(os.environ)
+    jsdom = paths.jsdom_module()
+    if jsdom:
+        env['AKB_JSDOM'] = jsdom.as_uri()
+    proc = subprocess.run([paths.node_binary(), '--disable-warning=ExperimentalWarning',
                            str(ROOT / 'tools/convert-position.mjs')],
-                          input=json.dumps([request]), text=True, capture_output=True, timeout=30)
+                          input=json.dumps([request]), text=True, capture_output=True, timeout=30, env=env)
     if proc.returncode:
         raise LocationError('converter_failed', 'DOM conversion process failed; check local runtime installation')
     result = json.loads(proc.stdout)[0]

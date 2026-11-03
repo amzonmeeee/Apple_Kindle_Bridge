@@ -37,6 +37,7 @@ Position conversion needs the additional tools in the [setup instructions](docs/
 
 ## Details
 
+- [Mac app](docs/app.md)
 - [Commands and synchronization rules](docs/usage.md)
 - [KOReader service connection](docs/kosync.md)
 - [Data handling and verification limits](docs/design.md)

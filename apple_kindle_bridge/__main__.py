@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 
+from . import paths
 from .apple import InspectionError, compare, discover, inspect_library
 from .epub import LocationError
 
@@ -42,29 +43,29 @@ def main():
     diff.add_argument("after", type=Path)
     for name in ("kindle-highlights", "apple-highlights"):
         native = commands.add_parser(name, help="Transfer one book's highlights through the native apps")
-        native.add_argument("--config", type=Path, default=Path('.runtime/native.json'))
+        native.add_argument("--config", type=Path, default=paths.native_config())
         native.add_argument("--asset-id", required=True)
         native.add_argument("--kindle-book-id", required=True)
         if name == "kindle-highlights":
             native.add_argument("--annotation-uuid")
         else:
             native.add_argument("--kindle-annotation-id")
-        native.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+        native.add_argument("--backup-dir", type=Path, default=paths.backup_dir())
         native.add_argument("--apply", action="store_true")
         native.add_argument("--output", type=Path, required=True)
     native_position = commands.add_parser("native-position", help="Transfer one book's resume position between the Mac apps")
-    native_position.add_argument("--config", type=Path, default=Path('.runtime/native.json'))
+    native_position.add_argument("--config", type=Path, default=paths.native_config())
     native_position.add_argument("--asset-id", required=True)
     native_position.add_argument("--kindle-book-id", required=True)
     native_position.add_argument("--to", choices=('apple', 'kindle'), required=True)
-    native_position.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+    native_position.add_argument("--backup-dir", type=Path, default=paths.backup_dir())
     native_position.add_argument("--apply", action="store_true")
     native_position.add_argument("--output", type=Path, required=True)
     apple_position = commands.add_parser("apple-position", help="Write a verified position to Apple Books")
     apple_position.add_argument("source", type=Path)
     apple_position.add_argument("--asset-id", required=True)
     apple_position.add_argument("--expected-cfi", required=True)
-    apple_position.add_argument("--backup-dir", type=Path, default=Path('state/native-backups'))
+    apple_position.add_argument("--backup-dir", type=Path, default=paths.backup_dir())
     apple_position.add_argument("--apply", action="store_true")
     apple_position.add_argument("--output", type=Path, required=True)
     highlights = commands.add_parser("highlights-export", help="Export private Apple Books highlights and notes without reader writes")
