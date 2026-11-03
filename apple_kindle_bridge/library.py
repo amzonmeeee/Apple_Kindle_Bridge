@@ -64,6 +64,13 @@ def protected_epub(path):
     return any(marker in names for marker in PROTECTED_MARKERS)
 
 
+def folder_size(path):
+    path = Path(path)
+    if path.is_file():
+        return path.stat().st_size
+    return sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
+
+
 def apple_books():
     library, annotations = discover()
     with snapshot(library) as db:
@@ -94,6 +101,11 @@ def apple_books():
             entry['kind'], entry['reason'] = 'protected', 'Apple Books Store purchase with DRM'
         else:
             entry['kind'] = 'transferable'
+            # Apple keeps most EPUBs as folders. Their images are already compressed,
+            # so the folder size is close to the size of the zipped file.
+            entry['size'] = folder_size(path)
+            if entry['size'] > SEND_LIMIT:
+                entry['kind'], entry['reason'] = 'too_large', 'Over the 50 MB Send to Kindle limit'
         books.append(entry)
     return books
 
