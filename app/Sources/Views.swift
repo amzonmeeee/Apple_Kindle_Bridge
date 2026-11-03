@@ -8,13 +8,21 @@ struct BridgeApp: App {
 
 
     var body: some Scene {
-        WindowGroup("Apple Kindle Bridge") {
+        // One window, no tabs, no New Window command.
+        Window("Apple Kindle Bridge", id: "main") {
             RootView()
                 .environmentObject(model)
                 .frame(minWidth: 760, minHeight: 560)
-                .task { await model.start() }
+                .task {
+                    NSWindow.allowsAutomaticWindowTabbing = false
+                    await model.start()
+                }
         }
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .windowList) {}
+        }
     }
 }
 
@@ -165,6 +173,7 @@ struct FirstImportView: View {
 }
 
 struct BookChecklist: View {
+    @EnvironmentObject var model: AppModel
     let title: String
     let books: [Book]
     @Binding var selection: Set<String>
@@ -187,7 +196,11 @@ struct BookChecklist: View {
                         Text(book.title).lineLimit(1)
                         HStack(spacing: 6) {
                             if book.kind == "send_only" { Text("PDF・只傳送，不同步").font(.caption).foregroundStyle(.orange) }
-                            if book.pending { Text("等待配對").font(.caption).foregroundStyle(.blue) }
+                            if book.pending {
+                                Text("等待配對").font(.caption).foregroundStyle(.blue)
+                                Button("取消等待") { Task { await model.forgetPending(book) } }
+                                    .buttonStyle(.link).font(.caption)
+                            }
                             if !book.author.isEmpty { Text(book.author).font(.caption).foregroundStyle(.secondary) }
                         }
                     }
@@ -406,13 +419,25 @@ struct PDFLayoutOption: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Picker("PDF 版面", selection: $model.pdfAdjustable) {
-                Text("保持原始版面（預設）").tag(false)
-                Text("可調整版面").tag(true)
+            HStack(spacing: 18) {
+                Picker("傳送方式", selection: $model.manualSend) {
+                    Text("自動").tag(false)
+                    Text("手動").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 200)
+                Picker("PDF 版面", selection: $model.pdfAdjustable) {
+                    Text("保持原始版面（預設）").tag(false)
+                    Text("可調整版面").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 400)
+                .disabled(model.manualSend)
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
-            if !KindleShare.trusted {
+            if model.manualSend {
+                Text("手動模式：每本書請自己在 Send to Kindle 視窗確認標題、PDF 版面，再按 Send 和 OK。")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if !KindleShare.trusted {
                 Text("沒有輔助使用權限時，App 無法替你選擇。請在 Send to Kindle 視窗裡手動選「PDF Options」。")
                     .font(.caption).foregroundStyle(.orange)
             }

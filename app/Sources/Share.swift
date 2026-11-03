@@ -76,16 +76,18 @@ final class KindleShare: NSObject, NSSharingServiceDelegate {
             let sheets = Sheet.windows()
             if sheets.isEmpty {
                 if seen { gone += 1 }
-                if (seen && gone > 5) || (!seen && tick > 60) { return confirmed ? .sent : .failed }
+                // Wait 3 s of absence so an upload is never cut short by the next file.
+                if (seen && gone > 10) || (!seen && tick > 60) { return confirmed ? .sent : .failed }
                 continue
             }
             seen = true
             gone = 0
-            if Sheet.hasText(["file sent", "已傳送", "已发送"], in: sheets) {
+            if Sheet.hasText(["file sent", "has been sent", "已傳送", "已发送"], in: sheets) {
                 confirmed = true
                 if automatic { _ = Sheet.press(exact: ["ok", "好", "確定", "确定"], in: sheets) }
                 continue
             }
+            if Sheet.hasText(["in progress"], in: sheets) || Sheet.hasDescription("in progress", in: sheets) { continue }
             guard automatic else { continue }
             if layoutStep == 0, Sheet.press(prefix: "keep original layout", in: sheets) { layoutStep = 1; continue }
             if layoutStep == 1, Sheet.press(prefix: "make layout adjustable", in: sheets) { layoutStep = 2; continue }
@@ -109,18 +111,28 @@ enum Sheet {
         return value
     }
 
-    /// The app's own SwiftUI window, and the alerts attached to it, are never touched.
+    /// The app's own window, and the alerts attached to it, are never touched.
     static func isMain(_ window: AXUIElement) -> Bool {
-        (attribute(window, kAXIdentifierAttribute) as? String ?? "").hasPrefix("SwiftUI")
+        let identifier = attribute(window, kAXIdentifierAttribute) as? String ?? ""
+        let title = attribute(window, kAXTitleAttribute) as? String ?? ""
+        return identifier.hasPrefix("SwiftUI") || identifier == "main" || title == "Apple Kindle Bridge"
     }
 
+    /// Share windows with any content. While uploading, the sheet shows only an
+    /// "In progress" indicator and no buttons, so content of any kind counts.
     static func windows() -> [AXUIElement] {
         let all = attribute(AXUIElementCreateApplication(getpid()), kAXWindowsAttribute) as? [AXUIElement] ?? []
-        return all.filter { !isMain($0) && !elements(in: $0, role: kAXButtonRole as String).isEmpty }
+        return all.filter { window in
+            !isMain(window) && [kAXButtonRole, kAXStaticTextRole, "AXGenericElement", kAXProgressIndicatorRole]
+                .contains { !elements(in: window, role: $0 as String).isEmpty }
+        }
     }
 
     static func otherWindowVisible() -> Bool {
-        NSApp.windows.contains { $0.isVisible && !($0.identifier?.rawValue ?? "").hasPrefix("SwiftUI") }
+        NSApp.windows.contains { window in
+            let id = window.identifier?.rawValue ?? ""
+            return window.isVisible && !id.hasPrefix("SwiftUI") && id != "main" && window.title != "Apple Kindle Bridge"
+        }
     }
 
     static func elements(in element: AXUIElement, role: String, depth: Int = 0) -> [AXUIElement] {
@@ -143,6 +155,12 @@ enum Sheet {
                 let value = ((attribute(text, kAXValueAttribute) as? String) ?? label(text)).lowercased()
                 return needles.contains { value.contains($0) }
             }
+        }
+    }
+
+    static func hasDescription(_ needle: String, in windows: [AXUIElement]) -> Bool {
+        windows.contains { window in
+            elements(in: window, role: "AXGenericElement").contains { label($0).contains(needle) }
         }
     }
 

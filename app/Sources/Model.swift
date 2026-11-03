@@ -174,6 +174,9 @@ final class AppModel: ObservableObject {
     @Published var notice: String?
     @Published var sharing = false
     /// Send to Kindle offers this for PDFs only. Keeping the original layout is its default.
+    @Published var manualSend = !KindleShare.autoSend {
+        didSet { KindleShare.autoSend = !manualSend }
+    }
     @Published var pdfAdjustable = UserDefaults.standard.bool(forKey: "pdfAdjustable") {
         didSet { UserDefaults.standard.set(pdfAdjustable, forKey: "pdfAdjustable") }
     }
@@ -416,6 +419,11 @@ final class AppModel: ObservableObject {
             }
         }
         notice = "已送出。兩邊都出現同一本書後，App 會依書名自動配對。"
+    }
+
+    func forgetPending(_ book: Book) async {
+        _ = try? await Backend.call(["forget-pending", book.id])
+        await refreshLibrary()
     }
 
     func unpair(_ pair: Pair) async {

@@ -110,9 +110,18 @@ def epub_title(path):
         return None
 
 
+PENDING_DAYS = 3
+
+
 def resolve_pending(modules):
-    """Pair books that arrived on the other side after an import."""
-    pending = load_pending()
+    """Pair books that arrived on the other side after an import.
+
+    A book that never arrives (a failed send, or one deleted on the other side)
+    stops waiting after PENDING_DAYS, or when the user cancels it.
+    """
+    now = datetime.now(timezone.utc)
+    pending = [p for p in load_pending()
+               if (now - datetime.fromisoformat(p['created'])).days < PENDING_DAYS]
     if not pending:
         return
     apple = library.apple_books()
