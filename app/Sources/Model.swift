@@ -325,6 +325,12 @@ final class AppModel: ObservableObject {
         await refreshAll()
     }
 
+    /// The Send to Kindle share extension. Its title is localized and can be
+    /// upper case, such as "上傳至 KINDLE", so match without case.
+    static func kindleShareService(for urls: [URL]) -> NSSharingService? {
+        NSSharingService.sharingServices(forItems: urls).first { $0.title.range(of: "kindle", options: .caseInsensitive) != nil }
+    }
+
     func sendToKindle(_ books: [Book]) async {
         guard !books.isEmpty else { return }
         await work("正在準備檔案") {
@@ -334,7 +340,8 @@ final class AppModel: ObservableObject {
             let urls = files.filter { !($0["too_large"] as? Bool ?? false) }.compactMap { ($0["path"] as? String).map(URL.init(fileURLWithPath:)) }
             if !large.isEmpty { notice = "超過 200MB，Send to Kindle 不接受：\(large.joined(separator: "、"))" }
             guard !urls.isEmpty else { return }
-            guard let service = NSSharingService.sharingServices(forItems: urls).first(where: { $0.title.contains("Kindle") }) else {
+            guard let service = Self.kindleShareService(for: urls) else {
+                _ = try? await Backend.call(["forget-pending"] + books.map(\.id))
                 throw Backend.Failure(message: "找不到「Send to Kindle」分享功能，請確認 Kindle for Mac 已安裝並登入")
             }
             service.perform(withItems: urls)
@@ -359,7 +366,7 @@ final class AppModel: ObservableObject {
             for url in urls { _ = try? await NSWorkspace.shared.open([url], withApplicationAt: URL(fileURLWithPath: "/System/Applications/Books.app"), configuration: NSWorkspace.OpenConfiguration()) }
         }
         if toKindle {
-            if let service = NSSharingService.sharingServices(forItems: urls).first(where: { $0.title.contains("Kindle") }) {
+            if let service = Self.kindleShareService(for: urls) {
                 service.perform(withItems: urls)
             } else {
                 error = "找不到「Send to Kindle」分享功能"

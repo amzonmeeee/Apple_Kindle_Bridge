@@ -119,6 +119,11 @@ def resolve_pending(modules):
     used_apple = {p['apple_asset_id'] for p in paired}
     used_kindle = {p['kindle_book_id'] for p in paired}
     remaining = []
+
+    def done(item):
+        if item.get('path'):
+            Path(item['path']).unlink(missing_ok=True)
+
     for item in pending:
         titles = {library.norm_title(t) for t in item['titles'] if t}
         if item['to'] == 'kindle':
@@ -127,12 +132,14 @@ def resolve_pending(modules):
             if len(hits) == 1:
                 library.add_pair(item['apple_id'], hits[0]['id'], 'upload')
                 used_kindle.add(hits[0]['id'])
+                done(item)
                 continue
         else:
             hits = [b for b in apple if b['id'] not in used_apple and library.norm_title(b['title']) in titles]
             if len(hits) == 1:
                 library.add_pair(hits[0]['id'], item['kindle_id'], 'import')
                 used_apple.add(hits[0]['id'])
+                done(item)
                 continue
         remaining.append(item)
     save_pending(remaining)
@@ -285,7 +292,8 @@ def package_for_kindle(apple_ids):
         files.append({'apple_id': apple_id, 'title': book['title'], 'path': str(target), 'size': size,
                       'too_large': size > 200 * 1024 * 1024})
         pending = [p for p in pending if p.get('apple_id') != apple_id]
-        pending.append({'to': 'kindle', 'apple_id': apple_id, 'titles': [book['title'], epub_title(target)],
+        pending.append({'to': 'kindle', 'apple_id': apple_id, 'path': str(target),
+                        'titles': [book['title'], epub_title(target)],
                         'created': datetime.now(timezone.utc).isoformat()})
     save_pending(pending)
     return {'files': files}
@@ -313,7 +321,8 @@ def import_to_apple(kindle_ids):
             raise ValueError(f'{book.title}: conversion failed')
         subprocess.run(['open', '-g', '-a', 'Books', str(target)], check=True)
         pending = [p for p in pending if p.get('kindle_id') != kindle_id]
-        pending.append({'to': 'apple', 'kindle_id': kindle_id, 'titles': [book.title, epub_title(target)],
+        pending.append({'to': 'apple', 'kindle_id': kindle_id, 'path': str(target),
+                        'titles': [book.title, epub_title(target)],
                         'created': datetime.now(timezone.utc).isoformat()})
         done.append({'kindle_id': kindle_id, 'title': book.title, 'path': str(target)})
     save_pending(pending)
@@ -342,8 +351,15 @@ def main(argv):
         sync_status.baseline_file(args[0]).unlink(missing_ok=True)
         return {'unpaired': args[0]}
     if command == 'forget-pending':
-        save_pending([p for p in load_pending() if args[0] not in (p.get('apple_id'), p.get('kindle_id'))])
-        return {'forgotten': args[0]}
+        keep = []
+        for item in load_pending():
+            if {item.get('apple_id'), item.get('kindle_id')} & set(args):
+                if item.get('path'):
+                    Path(item['path']).unlink(missing_ok=True)
+            else:
+                keep.append(item)
+        save_pending(keep)
+        return {'forgotten': args}
     raise ValueError('Unknown command: ' + command)
 
 
