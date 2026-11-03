@@ -19,7 +19,7 @@ from .apple import discover, snapshot
 
 KINDLE_APP = Path('/Applications/Amazon Kindle.app')
 # Observed: a 158 MB EPUB was refused, so use the documented 50 MB e-mail limit.
-SEND_TO_KINDLE_LIMIT = 50 * 1024 * 1024
+SEND_TO_KINDLE_LIMIT = library.SEND_LIMIT
 LASSEN = Path.home() / 'Library/Containers/com.amazon.Lassen/Data'
 
 
@@ -273,13 +273,15 @@ def package_for_kindle(apple_ids):
     files, pending = [], load_pending()
     for apple_id in apple_ids:
         book = books.get(apple_id)
-        if not book or book['kind'] != 'transferable':
+        if not book or book['kind'] not in ('transferable', 'send_only'):
             raise ValueError(f'Cannot send {book["title"] if book else apple_id}: '
                              + (book.get('reason') if book else 'not found'))
         source = Path(book['path'])
         safe = ''.join(ch for ch in book['title'] if ch not in '/:\\')[:120] or apple_id
         target = outbox() / f'{safe}.epub'
-        if source.is_dir():
+        if book['kind'] == 'send_only':
+            target = source  # a PDF file is shared as it is
+        elif source.is_dir():
             with zipfile.ZipFile(target, 'w') as z:
                 z.write(source / 'mimetype', 'mimetype', compress_type=zipfile.ZIP_STORED)
                 for item in sorted(source.rglob('*')):
@@ -294,6 +296,8 @@ def package_for_kindle(apple_ids):
         files.append({'apple_id': apple_id, 'title': book['title'], 'path': str(target), 'size': size,
                       'too_large': size > SEND_TO_KINDLE_LIMIT})
         pending = [p for p in pending if p.get('apple_id') != apple_id]
+        if book['kind'] == 'send_only':
+            continue  # PDFs are sent but never paired
         pending.append({'to': 'kindle', 'apple_id': apple_id, 'path': str(target),
                         'titles': [book['title'], epub_title(target)],
                         'created': datetime.now(timezone.utc).isoformat()})

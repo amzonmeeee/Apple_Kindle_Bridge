@@ -124,7 +124,7 @@ struct FirstImportView: View {
     @State private var toApple: Set<String> = []
     @State private var prepared = false
 
-    var appleBooks: [Book] { model.appleOnly.filter { $0.kind == "transferable" } }
+    var appleBooks: [Book] { model.appleOnly.filter(\.sendable) }
     var kindleBooks: [Book] { model.kindleOnly.filter { $0.kind == "transferable" } }
 
     var body: some View {
@@ -136,7 +136,8 @@ struct FirstImportView: View {
                 BookChecklist(title: "Apple Books → Kindle（\(appleBooks.count) 本）", books: appleBooks, selection: $toKindle)
                 BookChecklist(title: "Kindle → Apple Books（\(kindleBooks.count) 本）", books: kindleBooks, selection: $toApple)
             }
-            Text("傳到 Kindle 時會跳出 Send to Kindle 視窗，按一次「傳送」即可。書到了之後，要在 Kindle for Mac 裡下載才能配對。")
+            PDFLayoutOption()
+            Text("傳到 Kindle 時會跳出 Send to Kindle 視窗。有輔助使用權限時 App 會自動按「傳送」，否則請手動按。書到了之後，要在 Kindle for Mac 裡下載才能配對。")
                 .font(.footnote).foregroundStyle(.secondary)
             HStack {
                 Spacer()
@@ -184,7 +185,11 @@ struct BookChecklist: View {
                                      set: { if $0 { selection.insert(book.id) } else { selection.remove(book.id) } })) {
                     VStack(alignment: .leading) {
                         Text(book.title).lineLimit(1)
-                        if !book.author.isEmpty { Text(book.author).font(.caption).foregroundStyle(.secondary) }
+                        HStack(spacing: 6) {
+                            if book.kind == "send_only" { Text("PDF・只傳送，不同步").font(.caption).foregroundStyle(.orange) }
+                            if book.pending { Text("等待配對").font(.caption).foregroundStyle(.blue) }
+                            if !book.author.isEmpty { Text(book.author).font(.caption).foregroundStyle(.secondary) }
+                        }
                     }
                 }
             }
@@ -395,6 +400,26 @@ struct ChangeRow: View {
     }
 }
 
+
+struct PDFLayoutOption: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Picker("PDF 版面", selection: $model.pdfAdjustable) {
+                Text("保持原始版面（預設）").tag(false)
+                Text("可調整版面").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 420)
+            if !KindleShare.trusted {
+                Text("沒有輔助使用權限時，App 無法替你選擇。請在 Send to Kindle 視窗裡手動選「PDF Options」。")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+        }
+    }
+}
+
 // MARK: - Library
 
 struct LibraryView: View {
@@ -403,12 +428,12 @@ struct LibraryView: View {
     @State private var toApple: Set<String> = []
     @State private var showProtected = false
 
-    var appleBooks: [Book] { model.appleOnly.filter { $0.kind == "transferable" } }
+    var appleBooks: [Book] { model.appleOnly.filter(\.sendable) }
     var kindleBooks: [Book] { model.kindleOnly.filter { $0.kind == "transferable" } }
     /// Store editions and re-downloads can repeat a title; show each title and reason once.
     var unavailable: [Book] {
         var seen = Set<String>()
-        let all = model.appleOnly.filter { $0.kind != "transferable" } + model.kindleOnly.filter { $0.kind != "transferable" } + model.protected
+        let all = model.appleOnly.filter { !$0.sendable } + model.kindleOnly.filter { $0.kind != "transferable" } + model.protected
         return all.filter { seen.insert($0.title + "|" + Self.reason($0)).inserted }
             .sorted { (Self.reason($0), $0.title) < (Self.reason($1), $1.title) }
     }
@@ -441,6 +466,7 @@ struct LibraryView: View {
                     .disabled(toApple.isEmpty)
                 }
             }
+            PDFLayoutOption()
             DisclosureGroup("無法傳送的書（\(unavailable.count)）", isExpanded: $showProtected) {
                 List(unavailable) { book in
                     HStack {
@@ -460,6 +486,7 @@ struct LibraryView: View {
     static func reason(_ book: Book) -> String {
         switch book.kind {
         case "protected": return book.side == "kindle" ? "Kindle 商店購買（DRM）" : "Apple Books 商店購買（DRM）"
+        case "too_large": return "超過 50MB（Send to Kindle 上限）"
         case "not_downloaded": return book.side == "kindle" ? "請先在 Kindle for Mac 下載" : "請先在 Apple Books 下載"
         case "unsupported": return book.side == "kindle" ? "不是 KFX 格式" : (book.reason ?? "不是 EPUB")
         default: return book.reason ?? ""

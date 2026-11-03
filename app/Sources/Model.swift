@@ -18,6 +18,10 @@ struct Book: Identifiable, Hashable {
     let reason: String?
     let side: String
     let pending: Bool
+    let sizeMB: Double?
+
+    /// EPUBs can be paired and synced. PDFs can only be sent.
+    var sendable: Bool { kind == "transferable" || kind == "send_only" }
 }
 
 final class Change: Identifiable, ObservableObject {
@@ -169,6 +173,10 @@ final class AppModel: ObservableObject {
     @Published var error: String?
     @Published var notice: String?
     @Published var sharing = false
+    /// Send to Kindle offers this for PDFs only. Keeping the original layout is its default.
+    @Published var pdfAdjustable = UserDefaults.standard.bool(forKey: "pdfAdjustable") {
+        didSet { UserDefaults.standard.set(pdfAdjustable, forKey: "pdfAdjustable") }
+    }
 
     private let defaults = UserDefaults.standard
     var onboarded: Bool {
@@ -224,7 +232,7 @@ final class AppModel: ObservableObject {
             checks = [Check(id: "runtime", ok: false, warning: false, title: "內建工具",
                             detail: "工具不完整，請重新安裝：\(error.localizedDescription)", action: "install")]
         }
-        let trusted = ShareClicker.trusted
+        let trusted = KindleShare.trusted
         checks.append(Check(id: "accessibility", ok: true, warning: !trusted, title: "自動按「傳送」（選用）",
                             detail: trusted ? "已開啟。傳書到 Kindle 時會自動按「傳送」和「確定」"
                                             : "允許「輔助使用」後，傳書到 Kindle 時會自動按「傳送」和「確定」。打開後請重新開啟 App",
@@ -268,7 +276,7 @@ final class AppModel: ObservableObject {
         case "install_kindle":
             NSWorkspace.shared.open(URL(string: "macappstore://apps.apple.com/app/id405399194")!)
         case "accessibility":
-            ShareClicker.requestAccess()
+            KindleShare.requestAccess()
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility")!)
         case "open_kindle":
             NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Amazon Kindle.app"))
@@ -279,7 +287,7 @@ final class AppModel: ObservableObject {
     func finishOnboarding() async {
         onboarded = true
         await refreshLibrary()
-        phase = (appleOnly.contains { $0.kind == "transferable" } || kindleOnly.contains { $0.kind == "transferable" }) ? .firstImport : .main
+        phase = (appleOnly.contains { $0.sendable } || kindleOnly.contains { $0.kind == "transferable" }) ? .firstImport : .main
         if phase == .main { await refreshStatus() }
     }
 
@@ -296,7 +304,8 @@ final class AppModel: ObservableObject {
                     Book(id: raw["id"] as? String ?? "", title: raw["title"] as? String ?? "",
                          author: raw["author"] as? String ?? "", kind: raw["kind"] as? String ?? "",
                          reason: raw["reason"] as? String, side: raw["side"] as? String ?? side,
-                         pending: raw["pending_import"] != nil)
+                         pending: raw["pending_import"] != nil,
+                         sizeMB: (raw["size"] as? Double).map { $0 / 1_048_576 } ?? (raw["size"] as? Int).map { Double($0) / 1_048_576 })
                 }
             }
             appleOnly = books("apple_only", side: "apple").sorted { $0.title < $1.title }
@@ -356,20 +365,21 @@ final class AppModel: ObservableObject {
             sharing = true
             defer { sharing = false }
             do {
-                outcome = try await share.send(urls) { index, total, url in
+                outcome = try await share.send(urls, pdfAdjustable: pdfAdjustable) { index, total, url in
                     self.detail = "\(index)/\(total)  \(url.deletingPathExtension().lastPathComponent)。請在 Send to Kindle 視窗按「傳送」"
                 }
             } catch {
                 _ = try? await Backend.call(["forget-pending"] + books.map(\.id))
                 throw error
             }
-            let failed = outcome.failed.compactMap { ids[$0.path] }
+            let failed = (outcome.failed + outcome.unconfirmed).compactMap { ids[$0.path] }
             if !failed.isEmpty { _ = try? await Backend.call(["forget-pending"] + failed) }
         }
         if error == nil {
             var lines: [String] = []
             if !outcome.sent.isEmpty { lines.append("已送出 \(outcome.sent.count) 本。書出現在 Kindle for Mac 後，請在 Kindle 裡下載，App 會自動配對。") }
             if !outcome.failed.isEmpty { lines.append("\(outcome.failed.count) 本取消或失敗：\(outcome.failed.map { $0.deletingPathExtension().lastPathComponent }.joined(separator: "、"))") }
+            if !outcome.unconfirmed.isEmpty { lines.append("\(outcome.unconfirmed.count) 本無法確認是否送出（沒有輔助使用權限時讀不到 Send to Kindle 視窗）。請到 Kindle for Mac 確認。") }
             if !large.isEmpty { lines.append("超過 50MB 未傳送（Send to Kindle 的上限）：\(large.joined(separator: "、"))") }
             if !lines.isEmpty { notice = lines.joined(separator: "\n") }
         }
@@ -393,7 +403,7 @@ final class AppModel: ObservableObject {
             sharing = true
             defer { sharing = false }
             do {
-                let outcome = try await share.send(urls) { index, total, url in
+                let outcome = try await share.send(urls, pdfAdjustable: pdfAdjustable) { index, total, url in
                     self.busy = "正在傳送到 Kindle"
                     self.detail = "\(index)/\(total)  \(url.lastPathComponent)"
                 }

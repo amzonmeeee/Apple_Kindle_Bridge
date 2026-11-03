@@ -55,5 +55,11 @@ columns they use. An untested Kindle version shows a warning in onboarding.
   download the book in Kindle for Mac; the app pairs it.
 - Kindle to Apple Books: downloaded personal documents are converted from KFX to
   EPUB with Calibre and KFX Input, then opened in Apple Books.
+- PDFs up to 50 MB can be sent but are never paired or synced. The PDF layout
+  choice (keep original, the default, or adjustable) is set in the library and
+  applied automatically with Accessibility access; otherwise pick it by hand.
+- The Send to Kindle extension reports success even after Close. With
+  Accessibility access a send counts only when its "File sent" message appears;
+  without it the result is listed as unconfirmed.
 - Store purchases with DRM on either side are listed as unavailable.
 - Kindle for Mac lists only downloaded books.

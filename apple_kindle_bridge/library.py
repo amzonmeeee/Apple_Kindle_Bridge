@@ -13,6 +13,8 @@ import unicodedata
 from . import paths
 from .apple import discover, file_status, snapshot
 
+# Observed: a 158 MB EPUB was refused; the documented e-mail limit is 50 MB.
+SEND_LIMIT = 50 * 1024 * 1024
 PROTECTED_MARKERS = ('META-INF/sinf.xml', 'META-INF/encryption.xml', 'META-INF/rights.xml')
 
 
@@ -79,8 +81,13 @@ def apple_books():
             # Store books that are not downloaded have no file; they carry DRM anyway.
             entry['kind'], entry['reason'] = ('protected', 'Apple Books Store purchase with DRM') if row['ZSTOREID'] \
                 else ('not_downloaded', 'Download it in Apple Books first')
+        elif suffix == '.pdf' and info['status'] == 'file':
+            entry['size'] = Path(path).stat().st_size
+            # PDFs can be sent to Kindle, but positions and highlights do not map.
+            entry['kind'], entry['reason'] = ('send_only', 'PDF') if entry['size'] <= SEND_LIMIT \
+                else ('too_large', 'Over the 50 MB Send to Kindle limit')
         elif suffix != '.epub':
-            entry['kind'], entry['reason'] = 'unsupported', 'PDF' if suffix == '.pdf' else 'Not an EPUB'
+            entry['kind'], entry['reason'] = 'unsupported', 'Not an EPUB or PDF'
         elif info['status'] == 'missing':
             entry['kind'], entry['reason'] = 'not_downloaded', 'Download it in Apple Books first'
         elif row['ZSTOREID'] or protected_epub(path):
@@ -119,7 +126,8 @@ def overview(modules):
     def index(books, used):
         found = {}
         for b in books:
-            if b['id'] not in used and b['kind'] in ('transferable', 'not_downloaded'):
+            if b['id'] not in used and b['kind'] in ('transferable', 'not_downloaded') \
+                    and not str(b.get('path') or '').lower().endswith('.pdf'):
                 found.setdefault(norm_title(b['title']), []).append(b)
         return found
     apple_titles = index(apple, paired_apple)
