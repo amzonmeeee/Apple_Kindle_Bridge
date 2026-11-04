@@ -565,11 +565,15 @@ struct LibraryView: View {
     }
 
     static func reason(_ book: Book) -> String {
+        (book.side == "kindle" ? "Kindle：" : "Apple Books：") + detail(book)
+    }
+
+    static func detail(_ book: Book) -> String {
         switch book.kind {
-        case "protected": return book.side == "kindle" ? "Kindle 商店購買（DRM）" : "Apple Books 商店購買（DRM）"
+        case "protected": return "商店購買（DRM）"
         case "too_large": return "超過 50MB（Send to Kindle 上限）"
-        case "not_downloaded": return book.side == "kindle" ? "請先在 Kindle for Mac 下載" : "請先在 Apple Books 下載"
-        case "unsupported": return book.side == "kindle" ? "不是 KFX 格式" : (book.reason ?? "不是 EPUB")
+        case "not_downloaded": return book.side == "kindle" ? "請先在 Kindle for Mac 下載" : "檔案不在這台 Mac 上，請先在 Apple Books 下載"
+        case "unsupported": return book.side == "kindle" ? "不是 KFX 格式" : "不是 EPUB 或 PDF"
         default: return book.reason ?? ""
         }
     }

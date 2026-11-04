@@ -90,6 +90,9 @@ def apple_books():
             # Store books that are not downloaded have no file; they carry DRM anyway.
             entry['kind'], entry['reason'] = ('protected', 'Apple Books Store purchase with DRM') if row['ZSTOREID'] \
                 else ('not_downloaded', 'Download it in Apple Books first')
+        elif info['status'] == 'missing':
+            # iCloud can move a book's file off this Mac; check before the file type.
+            entry['kind'], entry['reason'] = 'not_downloaded', 'Download it in Apple Books first'
         elif suffix == '.pdf' and info['status'] == 'file':
             entry['size'] = Path(path).stat().st_size
             # PDFs can be sent to Kindle, but positions and highlights do not map.

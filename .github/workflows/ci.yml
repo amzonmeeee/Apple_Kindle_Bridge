@@ -11,9 +11,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # The macOS 26 SDK or later gives the app the Liquid Glass design.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun --show-sdk-version
 
       - uses: actions/setup-python@v5
         with:
