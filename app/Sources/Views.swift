@@ -300,6 +300,7 @@ struct PairRow: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let error = pair.error { Text(error).foregroundStyle(.red).font(.callout) }
                 PositionSection(pair: pair)
+                ReadSection(pair: pair)
                 if !pair.changes.isEmpty {
                     Text("標註與筆記（\(pair.changes.count)）").font(.headline)
                     ForEach(pair.changes) { change in ChangeRow(change: change) }
@@ -372,6 +373,38 @@ struct PositionSection: View {
                     }
                     .pickerStyle(.radioGroup)
                 }
+            }
+        }
+    }
+}
+
+struct ReadSection: View {
+    @ObservedObject var pair: Pair
+
+    func label(_ finished: Bool) -> String { finished ? "已讀完" : "未讀完" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("已讀完").font(.headline)
+                if let error = pair.readError {
+                    Text(error).font(.callout).foregroundStyle(.red)
+                } else {
+                    Text("Apple Books：\(label(pair.appleFinished))・Kindle：\(label(pair.kindleFinished))")
+                        .font(.callout).foregroundStyle(pair.readState == "synced" ? .secondary : .primary)
+                    if pair.readState == "synced" { Image(systemName: "checkmark").foregroundStyle(.green) }
+                }
+            }
+            if pair.readState == "changed" {
+                Picker("", selection: $pair.readTarget) {
+                    Text("Kindle 改成「\(label(pair.appleFinished))」").tag("kindle")
+                    Text("Apple Books 改成「\(label(pair.kindleFinished))」").tag("apple")
+                    Text("不同步").tag("none")
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Text("App 會打開 Apple Books 或 Kindle，替你在書上按「標示為已讀完」，需要輔助使用權限。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }

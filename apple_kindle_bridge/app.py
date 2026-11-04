@@ -307,8 +307,12 @@ def apply(plan):
     config, backups = paths.native_config(), paths.backup_dir()
     results = {'skipped': []}
     changes = plan.get('changes', [])
+    if plan.get('read') in ('apple', 'kindle'):
+        from . import read_state
+        emit(event='writing', step='Marking as read or unread')
+        results['read'] = read_state.write(modules, apple_id, kindle_id, plan['read'])
     if sync_status.is_pdf(apple_id):
-        return apply_pdf(plan, cfg, modules)
+        return {**apply_pdf(plan, cfg, modules), 'read': results.get('read')}
     to_apple_add = [c for c in changes if c['target'] == 'apple' and c['kind'] == 'add']
     to_apple_edit = [c for c in changes if c['target'] == 'apple' and c['kind'] != 'add']
     to_kindle_add = [c for c in changes if c['target'] == 'kindle' and c['kind'] == 'add']

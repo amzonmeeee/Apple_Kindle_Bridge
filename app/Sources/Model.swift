@@ -117,6 +117,11 @@ final class Pair: Identifiable, ObservableObject {
     let kindlePage: Int?
     let pageCount: Int?
     @Published var positionTarget: String
+    let readState: String?
+    let appleFinished: Bool
+    let kindleFinished: Bool
+    let readError: String?
+    @Published var readTarget: String
 
     init(_ raw: [String: Any]) {
         id = raw["apple_id"] as? String ?? ""
@@ -136,6 +141,12 @@ final class Pair: Identifiable, ObservableObject {
         appleUpdated = apple["updated"] as? String
         kindleUpdated = kindle["updated"] as? String
         positionTarget = ["changed", "conflict"].contains(positionState ?? "") ? (position["default_target"] as? String ?? "none") : "none"
+        let read = raw["read"] as? [String: Any] ?? [:]
+        readState = read["state"] as? String
+        appleFinished = read["apple"] as? Bool ?? false
+        kindleFinished = read["kindle"] as? Bool ?? false
+        readError = read["error"] as? String
+        readTarget = readState == "changed" ? (read["default_target"] as? String ?? "none") : "none"
         isPDF = raw["pdf"] as? Bool ?? false
         applePage = apple["page"] as? Int
         kindlePage = kindle["page"] as? Int
@@ -161,11 +172,13 @@ final class Pair: Identifiable, ObservableObject {
     func plan() -> [String: Any]? {
         let chosen = changes.filter { $0.selected && $0.available }
         let position = positionTarget == "none" ? nil : positionTarget
-        if chosen.isEmpty && position == nil && positionState != "synced" { return nil }
+        let read = readTarget == "none" ? nil : readTarget
+        if chosen.isEmpty && position == nil && read == nil && positionState != "synced" { return nil }
         var plan: [String: Any] = ["apple_id": id, "kindle_id": kindleId,
                                    "changes": chosen.map(\.payload),
                                    "position_synced": positionState == "synced"]
         if let position { plan["position"] = position }
+        if let read { plan["read"] = read }
         return plan
     }
 }

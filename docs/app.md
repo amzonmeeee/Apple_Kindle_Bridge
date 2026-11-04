@@ -48,6 +48,18 @@ come first. Every difference is selected by default and can be cleared.
 The exact Kindle version gate was removed. The writers check the database
 columns they use. An untested Kindle version shows a warning in onboarding.
 
+## Read state
+
+Apple Books keeps "finished" in `ZBKLIBRARYASSET.ZISFINISHED`; Kindle keeps
+"read" in `ZBOOK.ZRAWREADSTATE` (1 = read). Kindle sends a read mark straight
+to Amazon without a local queue, and Apple Books uploads only its own changes,
+so neither database is written. The bundled `readstate` helper opens the app
+and uses its book menu through Accessibility: Kindle cells are found by
+`Cell(asin:…)` and the actions `MarkAsReadAction` / `MarkAsUnreadAction`;
+Apple Books books by their title and author and the menu items
+`markAsFinished` / `markAsStillReading`. The side that changed since the last
+sync wins; without a baseline, finished wins.
+
 ## Import
 
 - Apple Books to Kindle: the app zips Apple's EPUB folders and hands them, one at a time, to the

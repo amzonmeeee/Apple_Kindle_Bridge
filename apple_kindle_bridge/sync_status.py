@@ -36,7 +36,13 @@ def load_baseline(apple_id):
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def save_baseline(apple_id, data):
+def save_baseline(apple_id, data, modules=None, kindle_id=None):
+    if modules is not None and kindle_id:
+        from . import read_state
+        try:
+            data['read'] = read_state.baseline(modules, apple_id, kindle_id)
+        except ValueError:
+            pass
     path = baseline_file(apple_id)
     data['saved'] = datetime.now(timezone.utc).isoformat()
     temp = path.with_suffix('.tmp')
@@ -299,8 +305,24 @@ def is_pdf(apple_id):
         return False
 
 
+def add_read_state(result, modules, apple_id, kindle_id, baseline):
+    from . import read_state
+    try:
+        result['read'] = read_state.status(modules, apple_id, kindle_id, baseline)
+    except Exception as exc:
+        result['read'] = {'state': 'error', 'error': str(exc)}
+    if result['read'].get('state') == 'changed' and result.get('state') in ('synced', 'waiting_cloud', 'one_way', 'error'):
+        result['state'] = 'needs_sync'
+    return result
+
+
 def pair_status(modules, cfg, apple_id, kindle_id):
     baseline = load_baseline(apple_id)
+    result = pair_status_without_read(modules, cfg, apple_id, kindle_id, baseline)
+    return add_read_state(result, modules, apple_id, kindle_id, baseline)
+
+
+def pair_status_without_read(modules, cfg, apple_id, kindle_id, baseline):
     if is_pdf(apple_id):
         return pdf_pair_status(modules, cfg, apple_id, kindle_id, baseline)
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
@@ -346,7 +368,7 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
         position = previous.get('position') if keep_position and previous.get('position') \
             else pdf_position.baseline(modules, apple_id, kindle_id)
         links = pdf_position.highlight_baseline(modules, cfg, apple_id, kindle_id)
-        save_baseline(apple_id, {'position': position, 'highlights': links})
+        save_baseline(apple_id, {'position': position, 'highlights': links}, modules, kindle_id)
         return len(links)
     old_links = {link['apple']: link for link in previous.get('highlights', [])}
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
@@ -387,5 +409,5 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
     position = {'apple_cfi': apple_pos, 'kindle_position': kindle_pos}
     if keep_position and previous.get('position'):
         position = previous['position']
-    save_baseline(apple_id, {'position': position, 'highlights': links})
+    save_baseline(apple_id, {'position': position, 'highlights': links}, modules, kindle_id)
     return len(links)
