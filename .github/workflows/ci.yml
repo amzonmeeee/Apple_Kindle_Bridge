@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Cache the CRengine probe
+        id: engine
+        uses: actions/cache@v4
+        with:
+          path: .runtime/crengine-probe
+          key: crengine-${{ runner.os }}-${{ hashFiles('third_party/positions/runtime-manifest.json', 'tools/build-engine.py', 'tools/crengine-probe.cpp') }}
+
+      - name: Build the CRengine probe
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: |
+          python tools/fetch-engine-sources.py
+          python tools/build-engine.py
+
+      - name: Build the app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then VERSION=""; fi
+          AKB_VERSION="$VERSION" ./app/build.sh "$RUNNER_TEMP/out"
+          cd "$RUNNER_TEMP/out"
+          ditto -c -k --keepParent "Apple Kindle Bridge.app" Apple-Kindle-Bridge.zip
+          shasum -a 256 Apple-Kindle-Bridge.zip | tee Apple-Kindle-Bridge.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apple-Kindle-Bridge
+          path: |
+            ${{ runner.temp }}/out/Apple-Kindle-Bridge.zip
+            ${{ runner.temp }}/out/Apple-Kindle-Bridge.zip.sha256
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="Apple-Kindle-Bridge-${GITHUB_REF_NAME#v}.zip"
+          cp "$RUNNER_TEMP/out/Apple-Kindle-Bridge.zip" "$RUNNER_TEMP/$NAME"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/$NAME" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/$NAME" --title "Apple Kindle Bridge ${GITHUB_REF_NAME#v}" --generate-notes
+          fi
