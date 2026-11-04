@@ -61,5 +61,9 @@ columns they use. An untested Kindle version shows a warning in onboarding.
 - The Send to Kindle extension reports success even after Close. With
   Accessibility access a send counts only when its "File sent" message appears;
   without it the result is listed as unconfirmed.
+- Once an imported book is paired, the app carries its highlights, notes, and
+  reading position to the new copy (`carry` command). Only additions toward the
+  new copy are written. A pair waits in `data/carry.json` until both copies
+  are downloaded.
 - Store purchases with DRM on either side are listed as unavailable.
 - Kindle for Mac lists only downloaded books.

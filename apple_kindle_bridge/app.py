@@ -137,6 +137,9 @@ def resolve_pending(modules):
 
     for item in pending:
         if item.get('apple_id') in used_apple or item.get('kindle_id') in used_kindle:
+            pair = next(p for p in paired if item.get('apple_id') == p['apple_asset_id']
+                        or item.get('kindle_id') == p['kindle_book_id'])
+            queue_carry(pair['apple_asset_id'], pair['kindle_book_id'], item['to'])
             done(item)  # paired already, for example by title
             continue
         titles = {library.norm_title(t) for t in item['titles'] if t}
@@ -145,6 +148,7 @@ def resolve_pending(modules):
                     and library.norm_title(b['title']) in titles]
             if len(hits) == 1:
                 library.add_pair(item['apple_id'], hits[0]['id'], 'upload')
+                queue_carry(item['apple_id'], hits[0]['id'], 'kindle')
                 used_kindle.add(hits[0]['id'])
                 done(item)
                 continue
@@ -152,6 +156,7 @@ def resolve_pending(modules):
             hits = [b for b in apple if b['id'] not in used_apple and library.norm_title(b['title']) in titles]
             if len(hits) == 1:
                 library.add_pair(hits[0]['id'], item['kindle_id'], 'import')
+                queue_carry(hits[0]['id'], item['kindle_id'], 'apple')
                 used_apple.add(hits[0]['id'])
                 done(item)
                 continue
@@ -159,10 +164,67 @@ def resolve_pending(modules):
     save_pending(remaining)
 
 
+# ---- carrying annotations with an imported book ---------------------------
+
+def carry_file():
+    return paths.data_dir() / 'carry.json'
+
+
+def load_carry():
+    path = carry_file()
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def queue_carry(apple_id, kindle_id, to):
+    items = [c for c in load_carry() if c['apple_id'] != apple_id]
+    items.append({'apple_id': apple_id, 'kindle_id': kindle_id, 'to': to})
+    carry_file().write_text(json.dumps(items, indent=2))
+
+
+def carry():
+    """Copy highlights, notes, and the reading position to a newly imported copy.
+
+    Only additions toward the new copy are written; nothing is deleted or
+    overwritten. A pair waits in the queue until both copies are ready.
+    """
+    cfg, modules = load_runtime()
+    resolve_pending(modules)
+    ready = {(p['apple']['id'], p['kindle']['id']): p for p in library.overview(modules)['pairs'] if p['ready']}
+    remaining, done = [], []
+    for item in load_carry():
+        key = (item['apple_id'], item['kindle_id'])
+        if key not in ready:
+            remaining.append(item)
+            continue
+        title = ready[key]['apple']['title']
+        emit(event='carrying', title=title)
+        try:
+            status = sync_status.pair_status(modules, cfg, *key)
+            to = item['to']
+            changes = [c for c in status.get('highlights', {}).get('changes', [])
+                       if c['kind'] == 'add' and c['target'] == to and c['supported']]
+            plan = {'apple_id': key[0], 'kindle_id': key[1], 'changes': changes}
+            position = status.get('position', {})
+            if position.get('state') in ('changed', 'conflict'):
+                plan['position'] = to
+            else:
+                plan['position_synced'] = position.get('state') == 'synced'
+            result = apply(plan)
+            done.append({'title': title, 'to': to, 'annotations': len(changes),
+                         'position': 'position' in plan, 'skipped': result.get('skipped', [])})
+        except Exception as exc:
+            log_error(['carry', *key])
+            remaining.append(item)
+            done.append({'title': title, 'to': item['to'], 'error': str(exc)})
+    carry_file().write_text(json.dumps(remaining, indent=2))
+    return {'carried': done, 'waiting': len(remaining)}
+
+
 def library_overview():
     cfg, modules = load_runtime()
     resolve_pending(modules)
     result = library.overview(modules)
+    result['carry_waiting'] = len(load_carry())
     waiting = {p.get('apple_id') or p.get('kindle_id'): p for p in load_pending()}
     for group in ('apple_only', 'kindle_only'):
         for book in result[group]:
@@ -360,6 +422,8 @@ def main(argv):
         return library_overview()
     if command == 'status':
         return status(args[0] if args else None)
+    if command == 'carry':
+        return carry()
     if command == 'apply':
         return apply(json.loads(sys.stdin.read()))
     if command == 'package-for-kindle':

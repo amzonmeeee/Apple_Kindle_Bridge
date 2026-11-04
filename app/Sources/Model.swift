@@ -298,7 +298,31 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         await refreshLibrary()
+        await carryAnnotations()
         await refreshStatus()
+    }
+
+    @Published var carryWaiting = 0
+
+    /// After an import is paired, bring its highlights, notes, and position along.
+    func carryAnnotations() async {
+        guard carryWaiting > 0 else { return }
+        var carried: [[String: Any]] = []
+        await work("正在帶入標註與筆記") {
+            let result = try await Backend.call(["carry"]) { [weak self] event in self?.progress(event) } as? [String: Any] ?? [:]
+            carried = result["carried"] as? [[String: Any]] ?? []
+            carryWaiting = result["waiting"] as? Int ?? 0
+        }
+        guard !carried.isEmpty else { return }
+        let lines = carried.map { item -> String in
+            let title = item["title"] as? String ?? ""
+            let side = (item["to"] as? String) == "kindle" ? "Kindle" : "Apple Books"
+            if let error = item["error"] as? String { return "《\(title)》帶入 \(side) 失敗：\(error)" }
+            let count = item["annotations"] as? Int ?? 0
+            let position = (item["position"] as? Bool ?? false) ? "，並移到相同的閱讀位置" : ""
+            return "《\(title)》已帶入 \(side)：\(count) 項標註與筆記\(position)"
+        }
+        notice = lines.joined(separator: "\n")
     }
 
     func refreshLibrary() async {
@@ -314,6 +338,7 @@ final class AppModel: ObservableObject {
                          onKindle: raw["on_kindle"] as? Bool ?? false)
                 }
             }
+            carryWaiting = result["carry_waiting"] as? Int ?? 0
             appleOnly = books("apple_only", side: "apple").sorted { $0.title < $1.title }
             kindleOnly = books("kindle_only", side: "kindle").sorted { $0.title < $1.title }
             protected = books("protected", side: "apple")

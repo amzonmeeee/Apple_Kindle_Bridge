@@ -477,7 +477,7 @@ struct LibraryView: View {
                 Text("書庫").font(.title2.bold())
                 Spacer()
                 Button { addExternal() } label: { Label("加入外部書…", systemImage: "plus") }
-                Button { Task { await model.refreshLibrary() } } label: { Label("重新整理", systemImage: "arrow.clockwise") }
+                Button { Task { await model.refreshLibrary(); await model.carryAnnotations() } } label: { Label("重新整理", systemImage: "arrow.clockwise") }
             }
             HStack(alignment: .top, spacing: 16) {
                 VStack {
