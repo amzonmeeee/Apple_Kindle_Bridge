@@ -92,7 +92,7 @@ def apple_excerpt(path, verified, length=80):
 def position_status(book, baseline):
     from .native_position import apple_to_kindle
     with snapshot(book.annotations_db) as db:
-        apple = bookmark(db, book.apple_id)
+        apple = bookmark(db, book.apple_id, for_write=False)
     with snapshot(book.kindle_db) as db:
         row = db.execute('SELECT ZRAWCURRENTPOSITION,ZRAWLASTACCESSTIME FROM ZBOOK WHERE ZBOOKID=?',
                          ('A:' + book.kindle_id + '-0',)).fetchone()
@@ -233,6 +233,8 @@ def highlight_changes(book, baseline, note_offset):
                 change('add', a, 'kindle', apple_ids=[a['id']], apple_value=content(a))
             continue
         matched_kindle.add(link['kindle'])
+        if k is not None and not a['deleted'] and content(a) == content(k):
+            continue  # both sides already agree, even if both changed
         a_changed = a['deleted'] or content(a) != link['apple_value']
         k_changed = k is None or content(k) != link['kindle_value']
         if not a_changed and not k_changed:
@@ -311,18 +313,29 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     book = Book(modules, apple_id, kindle_id)
     with snapshot(book.annotations_db) as db:
-        apple_pos = bookmark(db, apple_id)['ZANNOTATIONLOCATION']
+        apple_pos = bookmark(db, apple_id, for_write=False)['ZANNOTATIONLOCATION']
     with snapshot(book.kindle_db) as db:
         kindle_pos = db.execute('SELECT ZRAWCURRENTPOSITION FROM ZBOOK WHERE ZBOOKID=?',
                                 ('A:' + kindle_id + '-0',)).fetchone()[0]
     apple = apple_highlights(book)
     kindle = kindle_highlights(book, capture['note_offset'])
+    links, used_kindle, linked_apple = [], set(), set()
+    # Keep earlier links whose two sides both still exist. Two highlights on the
+    # same sentence would otherwise make the text match ambiguous.
+    for link in old_links.values():
+        a, k = apple.get(link['apple']), kindle.get(link['kindle'])
+        if not a or a['deleted'] or not k:
+            continue
+        linked_apple.add(a['id'])
+        used_kindle.add(k['id'])
+        links.append({'apple': a['id'], 'kindle': k['id'], 'apple_value': content(a), 'kindle_value': content(k)}
+                     if content(a) == content(k) else link)
     kindle_by_key = {}
     for k in kindle.values():
-        kindle_by_key.setdefault(k['key'], []).append(k)
-    links = []
+        if k['id'] not in used_kindle:
+            kindle_by_key.setdefault(k['key'], []).append(k)
     for a in apple.values():
-        if a['deleted']:
+        if a['deleted'] or a['id'] in linked_apple:
             continue
         match = kindle_by_key.get(a['key'], [])
         if len(match) == 1:

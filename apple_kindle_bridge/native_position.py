@@ -90,14 +90,44 @@ def apple_to_kindle(path, cfi, reader, modules):
         candidates = list(context_candidates(epub, point, node_text, node_offset))
     finally:
         epub.close()
+    normalize = modules['epub_cfi'].normalize_with_map
     for text, offset in candidates:
-        norm, mapping = modules['epub_cfi'].normalize_with_map(text)
+        norm, mapping = normalize(text)
         if norm and reader.norm_text.count(norm) == 1:
+            start = unique_start(reader.norm_text, norm)
+            local = exact_index(mapping, offset)
             break
     else:
-        raise ValueError('The resume passage is absent or ambiguous')
-    start = unique_start(reader.norm_text, norm)
-    local = exact_index(mapping, offset)
+        start, local, text, offset = anchor_by_following_text(reader, normalize, candidates)
+    return finish_apple_to_kindle(reader, start, local, text, offset, verified)
+
+
+def anchor_by_following_text(reader, normalize, candidates):
+    """Place a repeated short text, such as a heading, by the next unique text after it.
+
+    Conversion can drop symbols between them, so the short text is found again by
+    searching backward from that unique text, within a short distance.
+    """
+    node_text, node_offset = candidates[0]
+    node_norm, node_map = normalize(node_text)
+    node_local = exact_index(node_map, node_offset)
+    full_text, full_offset = candidates[-1]
+    full_norm, full_map = normalize(full_text)
+    begin = bisect.bisect_left(full_map, full_offset)
+    for skip in range(len(node_norm), min(len(full_norm) - begin, 3000), 10):
+        snippet = full_norm[begin + skip:begin + skip + 60]
+        if len(snippet) < 30 or reader.norm_text.count(snippet) != 1:
+            continue
+        found = reader.norm_text.index(snippet)
+        window_start = max(0, found - skip - 200)
+        start = reader.norm_text.rfind(node_norm, window_start, found)
+        if start >= 0:
+            return start, node_local, node_text, node_offset
+        break
+    raise ValueError('The resume passage is absent or ambiguous')
+
+
+def finish_apple_to_kindle(reader, start, local, text, offset, verified):
     raw_index = reader.norm_map[start + local]
     target = reader.pos[raw_index]
     if reader.extract_text(target, target) != text[offset]:
@@ -156,7 +186,7 @@ def prepare(config, asset_id, kindle_id, direction):
         raise ValueError('Kindle position space differs from the parsed book')
     path, annotations = selected_book(asset_id)
     with snapshot(annotations) as db:
-        apple = bookmark(db, asset_id)
+        apple = bookmark(db, asset_id, for_write=False)
     kindle_db = Path(modules['ksdk'].LASSEN_DATA) / 'Library/Protected/BookData.sqlite'
     with snapshot(kindle_db) as db:
         rows = [dict(r) for r in db.execute(

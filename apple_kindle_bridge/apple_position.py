@@ -21,7 +21,7 @@ def selected_book(asset_id):
     return file_status(rows[0][0])['path'], annotations
 
 
-def bookmark(db, asset_id):
+def bookmark(db, asset_id, for_write=True):
     rows = db.execute('SELECT Z_PK,Z_OPT,ZANNOTATIONUUID,ZANNOTATIONLOCATION,'
                       'ZANNOTATIONMODIFICATIONDATE,ZFUTUREPROOFING8,ZFUTUREPROOFING10,ZPLUSERDATA '
                       'FROM ZAEANNOTATION WHERE ZANNOTATIONASSETID=? AND ZANNOTATIONTYPE=3 '
@@ -29,8 +29,11 @@ def bookmark(db, asset_id):
     if len(rows) != 1:
         raise ValueError('The book must have one active reading-position bookmark')
     row = dict(rows[0])
-    if row['ZPLUSERDATA'] is not None:
-        raise ValueError('Archived page-data writeback is not verified for this book')
+    # Apple Books sometimes caches page data with the bookmark and clears it later.
+    # Reading the CFI is safe; writing over cached page data is not verified.
+    if for_write and row['ZPLUSERDATA'] is not None:
+        raise ValueError('Apple Books is holding cached page data for this book. '
+                         'Close the book in Apple Books, wait a moment, and sync again.')
     return row
 
 
