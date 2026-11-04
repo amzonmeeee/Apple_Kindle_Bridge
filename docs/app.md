@@ -37,9 +37,11 @@ come first. Every difference is selected by default and can be cleared.
 - A baseline in `data/baselines/` stores both sides after each sync. A side that
   differs from it has changed. Without a baseline, the newer side is the default.
 - Positions within 1,500 Kindle positions count as the same page.
-- Highlight additions go both ways. Apple Books edits and deletions are written.
-  Kindle edits and deletions are listed but need a capture of the Kindle edit
-  format first; until then they are not selectable.
+- Additions, note edits, color changes, and deletions go both ways. Kindle edit
+  codes were captured from Kindle 7.70.1 on 2026-11-04: a note edit is action 2,
+  a color change is action 1 with dirty_flag 1, and a delete is action 3 with
+  the full payload. The server accepted each. Kindle keeps a highlight's note
+  when the highlight is deleted, so the bridge deletes the note too.
 - Each write quits the target app, backs up its database to `backups/`, and
   reopens it.
 

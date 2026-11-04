@@ -310,9 +310,7 @@ def apply(plan):
     to_apple_add = [c for c in changes if c['target'] == 'apple' and c['kind'] == 'add']
     to_apple_edit = [c for c in changes if c['target'] == 'apple' and c['kind'] != 'add']
     to_kindle_add = [c for c in changes if c['target'] == 'kindle' and c['kind'] == 'add']
-    for c in changes:
-        if c['target'] == 'kindle' and c['kind'] != 'add':
-            results['skipped'].append({'id': c['id'], 'reason': sync_status.KINDLE_WRITE_PENDING})
+    to_kindle_edit = [c for c in changes if c['target'] == 'kindle' and c['kind'] != 'add']
     if to_apple_add:
         emit(event='writing', step='Adding highlights to Apple Books')
         ids = [i for c in to_apple_add for i in c['kindle_ids']]
@@ -328,6 +326,9 @@ def apply(plan):
         if report['summary'].get('refused'):
             results['skipped'].extend({'id': 'add:' + e['source_uuid'], 'reason': e.get('reason')}
                                       for e in report['entries'] if e['status'] == 'refused')
+    if to_kindle_edit:
+        emit(event='writing', step='Updating highlights in Kindle')
+        results['kindle_edit'] = native_highlights.edit(config, kindle_id, to_kindle_edit, backups)
     if plan.get('position') in ('apple', 'kindle'):
         emit(event='writing', step='Moving the reading position')
         results['position'] = native_position.transfer(config, apple_id, kindle_id, plan['position'], backups, apply=True)

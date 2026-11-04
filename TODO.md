@@ -42,7 +42,7 @@ See [Mac app](docs/app.md).
 - [x] SwiftUI app with onboarding, sync list, library, and settings.
 - [x] Test onboarding, sync, and both imports in the app (2026-11-04).
   Mock books in both directions arrived with highlights, colors, and notes.
-- [ ] Capture the Kindle edit and delete format to enable those writes.
+- [x] Capture the Kindle edit and delete format to enable those writes.
 - [ ] Try one personal book with existing highlights before wider use.
 
 These results cover one device, firmware, and Mac app version.

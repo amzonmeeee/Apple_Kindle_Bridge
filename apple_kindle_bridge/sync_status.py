@@ -196,7 +196,7 @@ def content(item):
     return {'color': item['color'], 'underline': item['underline'], 'note': item['note']}
 
 
-def highlight_changes(book, baseline, note_offset):
+def highlight_changes(book, baseline, note_offset, kindle_edits=False):
     apple = apple_highlights(book)
     kindle = kindle_highlights(book, note_offset)
     links = {link['apple']: link for link in baseline.get('highlights', [])}
@@ -208,6 +208,8 @@ def highlight_changes(book, baseline, note_offset):
     changes, matched_kindle = [], set()
 
     def change(kind, item, target, supported=True, **extra):
+        if target == 'kindle' and kindle_edits:
+            supported = True
         entry = {'id': f'{kind}:{item["id"]}', 'kind': kind, 'target': target, 'text': item['text'][:200],
                  'selected': supported, 'supported': supported}
         if not supported:
@@ -284,7 +286,8 @@ def pair_status(modules, cfg, apple_id, kindle_id):
     except ValueError as exc:
         result['position'] = {'state': 'error', 'error': str(exc)}
     try:
-        changes, apple, kindle = highlight_changes(book, baseline, capture['note_offset'])
+        from .native_highlights import can_edit
+        changes, apple, kindle = highlight_changes(book, baseline, capture['note_offset'], can_edit(capture))
         result['highlights'] = {'changes': changes,
                                 'apple_count': sum(not a['deleted'] for a in apple.values()),
                                 'kindle_count': len(kindle),

@@ -169,3 +169,124 @@ def transfer(config, asset_id, kindle_id, backup_dir, apply=False, annotation_uu
     opened = subprocess.run(['open', '-a', cfg['kindle_app']], capture_output=True)
     report['app_reopened'] = opened.returncode == 0
     return report
+
+
+# ---- edits and deletions --------------------------------------------------
+# Codes observed from Kindle 7.70.1 (state/native-pilot-evidence): a note text
+# edit is action 2, a color change is action 1 with dirty_flag 1, and a delete
+# is action 3 carrying the full existing payload. Deleting a highlight in Kindle
+# leaves its note, so the bridge deletes an attached note explicitly.
+
+def can_edit(capture):
+    return all(isinstance(capture.get(k), dict) for k in ('update_note', 'update_highlight', 'delete'))
+
+
+def queue_rows(db_path, rows):
+    """Insert or replace queued edits. One row per annotation, like Kindle itself."""
+    con = sqlite3.connect(db_path)
+    try:
+        for ann_id, action, dirty, dataset, dataset_id, payload, created, modified in rows:
+            con.execute(
+                'INSERT OR REPLACE INTO local_edit (annotation_id, action, dataset, dataset_id, serialized_payload, '
+                'dirty_flag, created_time, modified_time, retry_count, expiration_timestamp, sync_behavior) '
+                'VALUES (?,?,?,?,?,?,?,?,0,\'\',0)',
+                (ann_id, action, dataset, dataset_id, payload, dirty, created, modified))
+        con.commit()
+    finally:
+        con.close()
+    return len(rows)
+
+
+def edit(config, kindle_id, edits, backup_dir):
+    """Apply Apple-side updates and deletions to Kindle highlights.
+
+    edits: [{'kind': 'update' | 'delete' | 'conflict' | 'differs', 'kindle_ids': [id],
+             'apple_value': {'color', 'underline', 'note'} or None for a deletion}]
+    """
+    cfg, modules = runtime(config)
+    ksdk = modules['ksdk']
+    capture = json.loads(Path(cfg['capture']).expanduser().read_text())
+    if not can_edit(capture):
+        raise ValueError('Kindle edit codes are not captured; no writes performed')
+    books = [b for b in ksdk.load_kindle_books() if b.bookid == kindle_id and b.guid]
+    if len(books) != 1:
+        raise ValueError('Select one downloaded Kindle cloud book by its exact book ID')
+    book = books[0]
+    db = Path(ksdk.find_ksdk_db())
+    offset = capture['note_offset']
+
+    def current():
+        found = {}
+        for a in ksdk.load_existing_annotations(str(db), book.dataset_id):
+            if a.source != 'nonsyncable_annotations':
+                found.setdefault(a.annotation_id, a)
+        return found
+
+    def plan(found):
+        now = int(time.time() * 1000)
+        rows = []
+        for item in edits:
+            hl = found.get(item['kindle_ids'][0])
+            if hl is None or hl.dataset not in (1, 12):
+                raise ValueError('A Kindle highlight to change is missing; check again before syncing')
+            notes = [a for a in found.values() if a.dataset == 3 and a.start == a.end == hl.end + offset]
+            note = notes[0] if len(notes) == 1 else None
+            value = item.get('apple_value')
+
+            def row(annotation, codes, payload, keep_created=False):
+                payload = dict(payload, last_modified=now)
+                if not keep_created:
+                    payload['created_time'] = now
+                created = annotation.payload.get('created_time', now) if keep_created else now
+                return (annotation.annotation_id, codes['action'], codes['dirty_flag'], annotation.dataset,
+                        book.dataset_id, json.dumps(payload, sort_keys=True, separators=(',', ':')), created, now)
+
+            if item['kind'] == 'delete' or value is None:
+                rows.append(row(hl, capture['delete'], hl.payload))
+                if note:
+                    rows.append(row(note, capture['delete'], note.payload))
+                continue
+            metadata = hl.payload.get('json_metadata', {})
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            color = 'yellow' if value['underline'] else value['color']
+            if color and metadata.get('mchl_color') != color:
+                payload = dict(hl.payload, json_metadata=json.dumps(dict(metadata, mchl_color=color), separators=(',', ':')))
+                rows.append(row(hl, capture['update_highlight'], payload, keep_created=True))
+            new_note = (value.get('note') or '').strip()
+            old_note = None
+            if note:
+                note_meta = note.payload.get('json_metadata', {})
+                old_note = (json.loads(note_meta) if isinstance(note_meta, str) else note_meta).get('note_text', '').strip()
+            if new_note and note and new_note != old_note:
+                payload = dict(note.payload, json_metadata=json.dumps({'note_text': new_note}, separators=(',', ':')))
+                rows.append(row(note, capture['update_note'], payload))
+            elif new_note and not note:
+                ann_id, dataset, payload = ksdk.make_note(book, hl.end + offset, new_note, now)
+                rows.append((ann_id, capture['create']['action'], capture['create']['dirty_flag'], dataset,
+                             book.dataset_id, payload, now, now))
+            elif not new_note and note:
+                rows.append(row(note, capture['delete'], note.payload))
+        return rows
+
+    rows = plan(current())
+    if not rows:
+        return {'write_performed': False, 'rows': 0}
+    subprocess.Popen(['osascript', '-e', 'tell application "Amazon Kindle" to quit'],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(120):
+        if subprocess.run(['pgrep', '-x', 'Kindle'], capture_output=True).returncode:
+            break
+        time.sleep(0.5)
+    else:
+        raise ValueError('Kindle did not close; no writes performed')
+    rows = plan(current())  # re-read after the app saved its final state
+    backup_dir = Path(backup_dir).expanduser().resolve()
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(dir=backup_dir, prefix='kindle-', suffix='.sqlite', delete=False) as handle:
+        backup = Path(handle.name)
+    with snapshot(db) as source, sqlite3.connect(backup) as destination:
+        source.backup(destination)
+    written = queue_rows(str(db), rows)
+    subprocess.run(['open', '-a', cfg['kindle_app']], capture_output=True)
+    return {'write_performed': True, 'rows': written, 'backup': str(backup)}

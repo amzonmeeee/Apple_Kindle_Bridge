@@ -19,10 +19,10 @@ def value(note=None, color='yellow'):
 
 
 class HighlightChanges(unittest.TestCase):
-    def run_changes(self, apple_items, kindle_items, baseline=None):
+    def run_changes(self, apple_items, kindle_items, baseline=None, kindle_edits=False):
         with mock.patch.object(sync_status, 'apple_highlights', return_value=dict(apple_items)), \
              mock.patch.object(sync_status, 'kindle_highlights', return_value=dict(kindle_items)):
-            changes, _, _ = sync_status.highlight_changes(None, baseline or {}, 0)
+            changes, _, _ = sync_status.highlight_changes(None, baseline or {}, 0, kindle_edits)
         return {(c['kind'], c['target']): c for c in changes}
 
     def test_new_items_go_to_the_other_side(self):
@@ -56,6 +56,12 @@ class HighlightChanges(unittest.TestCase):
         base = {'highlights': [{'apple': 'a1', 'kindle': 'k1', 'apple_value': value(), 'kindle_value': value()}]}
         found = self.run_changes([apple('a1', 'alpha', deleted=True)], [kindle('k1', 'alpha')], base)
         self.assertFalse(found[('delete', 'kindle')]['supported'])
+
+    def test_captured_codes_enable_kindle_deletes(self):
+        base = {'highlights': [{'apple': 'a1', 'kindle': 'k1', 'apple_value': value(), 'kindle_value': value()}]}
+        found = self.run_changes([apple('a1', 'alpha', deleted=True)], [kindle('k1', 'alpha')], base, kindle_edits=True)
+        self.assertTrue(found[('delete', 'kindle')]['supported'])
+        self.assertTrue(found[('delete', 'kindle')]['selected'])
 
     def test_baseline_detects_kindle_note_edit(self):
         base = {'highlights': [{'apple': 'a1', 'kindle': 'k1', 'apple_value': value(), 'kindle_value': value()}]}

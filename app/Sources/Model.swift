@@ -50,7 +50,8 @@ final class Change: Identifiable, ObservableObject {
     }
 
     /// Only Apple-side edits are available until the Kindle edit format is captured.
-    var targetSupported: Bool { kind == "add" || target == "apple" }
+    /// Kindle edits need the captured edit codes; the helper reports that through `supported`.
+    var targetSupported: Bool { kind == "add" || target == "apple" || supported }
     var available: Bool { canChooseTarget ? targetSupported : supported }
 
     var summary: String {
