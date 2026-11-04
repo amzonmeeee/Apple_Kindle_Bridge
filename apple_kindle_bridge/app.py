@@ -136,6 +136,9 @@ def resolve_pending(modules):
             Path(item['path']).unlink(missing_ok=True)
 
     for item in pending:
+        if item.get('apple_id') in used_apple or item.get('kindle_id') in used_kindle:
+            done(item)  # paired already, for example by title
+            continue
         titles = {library.norm_title(t) for t in item['titles'] if t}
         if item['to'] == 'kindle':
             hits = [b for b in kindle if b['type'] == 'PDOC' and b['id'] not in used_kindle
@@ -383,9 +386,18 @@ def main(argv):
     raise ValueError('Unknown command: ' + command)
 
 
+def log_error(argv):
+    import traceback
+    folder = (paths.home() or paths.ROOT / 'state') / 'logs'
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / 'errors.log', 'a') as log:
+        log.write(f"\n== {datetime.now().isoformat()} {' '.join(argv)}\n{traceback.format_exc()}")
+
+
 if __name__ == '__main__':
     try:
         emit(event='result', result=main(sys.argv[1:]))
     except Exception as exc:
+        log_error(sys.argv[1:])
         emit(event='error', message=str(exc), type=type(exc).__name__)
         sys.exit(1)
