@@ -61,6 +61,10 @@ columns they use. An untested Kindle version shows a warning in onboarding.
   Books stores a page index (BKPageLocation), and the converted Kindle book is
   matched to each page by its letters and digits. A bundled PDFKit helper,
   `pdftext`, reads the page text. All 48 pages of a test report round-tripped.
+  Only Apple Books to Kindle works: Apple Books uploads only changes it records
+  itself, and on a Mac it opens PDFs in Preview, so a page written into its
+  database never reached the iPhone (tested 2026-11-04). EPUB writes reach
+  iCloud because Apple Books reopens the book and saves the position itself.
   PDF highlights are not synced. The PDF layout
   choice (keep original, the default, or adjustable) is set in the library and
   applied automatically with Accessibility access; otherwise pick it by hand.

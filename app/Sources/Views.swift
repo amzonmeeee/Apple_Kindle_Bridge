@@ -233,7 +233,7 @@ struct StateBadge: View {
         switch pair.state {
         case "synced": return .green
         case "needs_sync": return .orange
-        case "waiting_cloud": return .blue
+        case "waiting_cloud", "one_way": return .blue
         default: return .red
         }
     }
@@ -353,9 +353,18 @@ struct PositionSection: View {
                 Excerpt(label: "Kindle", text: pair.kindleExcerpt, time: pair.kindleUpdated,
                         extra: pair.kindlePage.map { "第 \($0) 頁" } ?? pair.kindlePercent.map { String(format: "%.0f%%", $0) })
                 if pair.isPDF {
-                    Text("PDF 依頁數同步閱讀位置，標註暫不同步。").font(.caption).foregroundStyle(.secondary)
+                    Text("PDF 只能從 Apple Books 同步頁數到 Kindle，標註暫不同步。").font(.caption).foregroundStyle(.secondary)
                 }
-                if ["changed", "conflict"].contains(pair.positionState ?? "") {
+                if pair.positionState == "kindle_ahead" {
+                    Text("Kindle 讀到比較後面。PDF 的閱讀位置無法寫回 Apple Books：Mac 上的 Apple Books 用預覽程式打開 PDF，不會把別的程式寫入的頁數上傳到 iCloud。")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if pair.isPDF && ["changed", "conflict"].contains(pair.positionState ?? "") {
+                    Picker("同步方式", selection: $pair.positionTarget) {
+                        Text("Apple Books 的頁數 → Kindle").tag("kindle")
+                        Text("不同步").tag("none")
+                    }
+                    .pickerStyle(.radioGroup)
+                } else if ["changed", "conflict"].contains(pair.positionState ?? "") {
                     Picker("同步方式", selection: $pair.positionTarget) {
                         Text("Apple Books 的位置 → Kindle").tag("kindle")
                         Text("Kindle 的位置 → Apple Books").tag("apple")

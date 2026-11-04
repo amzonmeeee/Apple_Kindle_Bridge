@@ -184,7 +184,14 @@ def status(modules, apple_id, kindle_id, baseline):
         target = 'apple'
     else:
         target = 'kindle' if apple['updated'] >= (kindle['ZRAWLASTACCESSTIME'] or 0) else 'apple'
-    result.update(state='conflict' if apple_changed and kindle_changed else 'changed', default_target=target)
+    # Apple Books uploads only changes it records itself, and on a Mac it hands
+    # PDFs to Preview, so a written PDF page never reaches iCloud. Only the
+    # Apple-to-Kindle direction is offered.
+    if target == 'apple':
+        result.update(state='kindle_ahead', apple_write_supported=False)
+        return result
+    result.update(state='conflict' if apple_changed and kindle_changed else 'changed',
+                  default_target=target, apple_write_supported=False)
     return result
 
 
@@ -211,16 +218,8 @@ def transfer(modules, cfg, apple_id, kindle_id, direction):
     """Move the position to the other app, page by page."""
     book, reader, pdf, path, annotations, kindle_db = open_pair(modules, apple_id, kindle_id)
     if direction == 'apple':
-        quit_app('Books', 'Books')
-        kindle = kindle_row(kindle_db, kindle_id)
-        page = pdf.kindle_to_page(kindle['ZRAWCURRENTPOSITION'] or 0)
-        with snapshot(annotations) as db:
-            apple = apple_page(db, apple_id)
-        saved = backup(Path(annotations), 'apple-')
-        write_apple_page(annotations, apple_id, apple, page, len(pdf.pages))
-        # Opening the PDF itself would hand it to Preview. Books must run to upload.
-        subprocess.run(['open', '-g', '-a', 'Books'], capture_output=True)
-        return {'status': 'written', 'page': page + 1, 'backup': saved}
+        raise ValueError('Apple Books does not upload a PDF page written by another app; '
+                         'only Apple Books to Kindle is supported for PDFs')
     quit_app('Amazon Kindle', 'Kindle')
     with snapshot(annotations) as db:
         apple = apple_page(db, apple_id)

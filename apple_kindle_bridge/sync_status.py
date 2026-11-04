@@ -281,7 +281,8 @@ def pdf_pair_status(modules, apple_id, kindle_id, baseline):
     except ValueError as exc:
         result['position'] = {'state': 'error', 'error': str(exc)}
     state = result['position'].get('state')
-    result['state'] = 'needs_sync' if state in ('changed', 'conflict') else 'error' if state == 'error' else 'synced'
+    result['state'] = ('needs_sync' if state in ('changed', 'conflict') else 'error' if state == 'error'
+                       else 'one_way' if state == 'kindle_ahead' else 'synced')
     return result
 
 

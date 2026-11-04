@@ -152,6 +152,7 @@ final class Pair: Identifiable, ObservableObject {
         case "synced": return "已同步"
         case "needs_sync": return "需要同步"
         case "waiting_cloud": return "等待雲端"
+        case "one_way": return "Kindle 較新"
         case "unavailable": return "無法使用"
         default: return "錯誤"
         }
