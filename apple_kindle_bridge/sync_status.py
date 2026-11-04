@@ -115,7 +115,7 @@ def position_status(book, baseline):
     apple_changed = kindle_changed = True
     if base:
         apple_changed = apple_cfi != base['apple_cfi']
-        kindle_changed = abs(kindle_pos - base['kindle_position']) > POSITION_TOLERANCE
+        kindle_changed = abs(kindle_pos - (base.get('kindle_position') or 0)) > POSITION_TOLERANCE
     if apple_changed and not kindle_changed:
         direction = 'kindle'
     elif kindle_changed and not apple_changed:
@@ -306,7 +306,7 @@ def pair_status(modules, cfg, apple_id, kindle_id):
         return result
     try:
         result['position'] = position_status(book, baseline)
-    except ValueError as exc:
+    except Exception as exc:  # a position problem must not hide the highlights
         result['position'] = {'state': 'error', 'error': str(exc)}
     try:
         from .native_highlights import can_edit
@@ -348,7 +348,7 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
         apple_pos = bookmark(db, apple_id, for_write=False)['ZANNOTATIONLOCATION']
     with snapshot(book.kindle_db) as db:
         kindle_pos = db.execute('SELECT ZRAWCURRENTPOSITION FROM ZBOOK WHERE ZBOOKID=?',
-                                ('A:' + kindle_id + '-0',)).fetchone()[0]
+                                ('A:' + kindle_id + '-0',)).fetchone()[0] or 0
     apple = apple_highlights(book)
     kindle = kindle_highlights(book, capture['note_offset'])
     links, used_kindle, linked_apple = [], set(), set()

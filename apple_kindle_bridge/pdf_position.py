@@ -117,9 +117,12 @@ def write_apple_page(annotations, asset_id, expected, page, total):
         row = db.execute('SELECT Z_OPT,ZPLUSERDATA FROM ZAEANNOTATION WHERE Z_PK=?', (expected['Z_PK'],)).fetchone()
         if row is None or row[0] != expected['Z_OPT'] or row[1] != expected['raw']:
             raise ValueError('Apple Books position changed; check again before syncing')
+        # The same modification stamps as the verified EPUB writer. iCloud sync
+        # reads ZFUTUREPROOFING6 and 11, not only the modification date.
+        modified = time.time() - 978307200
         db.execute('UPDATE ZAEANNOTATION SET ZPLUSERDATA=?, ZFUTUREPROOFING10=COALESCE(?,ZFUTUREPROOFING10), '
-                   'ZANNOTATIONMODIFICATIONDATE=?, Z_OPT=Z_OPT+1 WHERE Z_PK=?',
-                   (blob, fraction, time.time() - 978307200, expected['Z_PK']))
+                   'ZANNOTATIONMODIFICATIONDATE=?, ZFUTUREPROOFING6=?, ZFUTUREPROOFING11=?, Z_OPT=Z_OPT+1 '
+                   'WHERE Z_PK=?', (blob, fraction, modified, str(modified), str(modified), expected['Z_PK']))
 
 
 CORE_DATA_EPOCH = 978307200
@@ -215,7 +218,8 @@ def transfer(modules, cfg, apple_id, kindle_id, direction):
             apple = apple_page(db, apple_id)
         saved = backup(Path(annotations), 'apple-')
         write_apple_page(annotations, apple_id, apple, page, len(pdf.pages))
-        subprocess.run(['open', '-g', '-a', 'Books', path], capture_output=True)
+        # Opening the PDF itself would hand it to Preview. Books must run to upload.
+        subprocess.run(['open', '-g', '-a', 'Books'], capture_output=True)
         return {'status': 'written', 'page': page + 1, 'backup': saved}
     quit_app('Amazon Kindle', 'Kindle')
     with snapshot(annotations) as db:
