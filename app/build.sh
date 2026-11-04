@@ -17,6 +17,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bridge"
 swiftc -O -swift-version 5 -parse-as-library -target arm64-apple-macos14.0 \
   -o "$APP/Contents/MacOS/Apple Kindle Bridge" app/Sources/*.swift
 
+swiftc -O -target arm64-apple-macos14.0 -o "$APP/Contents/Resources/pdftext" app/Tools/pdftext.swift
 cp app/Info.plist "$APP/Contents/Info.plist"
 rsync -a --exclude '__pycache__' apple_kindle_bridge "$APP/Contents/Resources/bridge/"
 rsync -a --exclude 'node_modules' third_party "$APP/Contents/Resources/bridge/"

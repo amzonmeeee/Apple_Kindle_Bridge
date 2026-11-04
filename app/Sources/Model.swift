@@ -112,6 +112,10 @@ final class Pair: Identifiable, ObservableObject {
     let kindleUpdated: String?
     let changes: [Change]
     let pendingUpload: Int
+    let isPDF: Bool
+    let applePage: Int?
+    let kindlePage: Int?
+    let pageCount: Int?
     @Published var positionTarget: String
 
     init(_ raw: [String: Any]) {
@@ -132,6 +136,10 @@ final class Pair: Identifiable, ObservableObject {
         appleUpdated = apple["updated"] as? String
         kindleUpdated = kindle["updated"] as? String
         positionTarget = ["changed", "conflict"].contains(positionState ?? "") ? (position["default_target"] as? String ?? "none") : "none"
+        isPDF = raw["pdf"] as? Bool ?? false
+        applePage = apple["page"] as? Int
+        kindlePage = kindle["page"] as? Int
+        pageCount = position["pages"] as? Int
         let highlights = raw["highlights"] as? [String: Any] ?? [:]
         changes = (highlights["changes"] as? [[String: Any]] ?? []).map(Change.init)
         pendingUpload = highlights["pending_upload"] as? Int ?? 0

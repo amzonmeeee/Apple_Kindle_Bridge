@@ -57,7 +57,11 @@ columns they use. An untested Kindle version shows a warning in onboarding.
   download the book in Kindle for Mac; the app pairs it.
 - Kindle to Apple Books: downloaded personal documents are converted from KFX to
   EPUB with Calibre and KFX Input, then opened in Apple Books.
-- PDFs up to 50 MB can be sent but are never paired or synced. The PDF layout
+- PDFs up to 50 MB can be sent. Their reading position syncs by page: Apple
+  Books stores a page index (BKPageLocation), and the converted Kindle book is
+  matched to each page by its letters and digits. A bundled PDFKit helper,
+  `pdftext`, reads the page text. All 48 pages of a test report round-tripped.
+  PDF highlights are not synced. The PDF layout
   choice (keep original, the default, or adjustable) is set in the library and
   applied automatically with Accessibility access; otherwise pick it by hand.
 - The Send to Kindle extension reports success even after Close. With

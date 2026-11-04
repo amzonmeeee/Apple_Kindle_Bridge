@@ -196,8 +196,7 @@ struct BookChecklist: View {
                         Text(book.title).lineLimit(1)
                         HStack(spacing: 6) {
                             if book.kind == "send_only" {
-                                Text(book.onKindle ? "PDF・已在 Kindle" : "PDF・只傳送，不同步").font(.caption)
-                                    .foregroundStyle(book.onKindle ? .green : .orange)
+                                Text("PDF・同步頁數，不同步標註").font(.caption).foregroundStyle(.orange)
                             }
                             if book.pending {
                                 Text("等待配對").font(.caption).foregroundStyle(.blue)
@@ -319,7 +318,10 @@ struct PairRow: View {
         } label: {
             HStack {
                 VStack(alignment: .leading) {
-                    Text(pair.title).font(.headline)
+                    HStack(spacing: 6) {
+                        Text(pair.title).font(.headline)
+                        if pair.isPDF { Text("PDF").font(.caption2.bold()).padding(.horizontal, 5).background(.orange.opacity(0.2), in: Capsule()) }
+                    }
                     if !pair.author.isEmpty { Text(pair.author).font(.caption).foregroundStyle(.secondary) }
                 }
                 Spacer()
@@ -346,9 +348,13 @@ struct PositionSection: View {
             if let error = pair.positionError {
                 Text(error).font(.callout).foregroundStyle(.red)
             } else {
-                Excerpt(label: "Apple Books", text: pair.appleExcerpt, time: pair.appleUpdated)
+                Excerpt(label: "Apple Books", text: pair.appleExcerpt, time: pair.appleUpdated,
+                        extra: pair.applePage.map { "第 \($0) 頁" })
                 Excerpt(label: "Kindle", text: pair.kindleExcerpt, time: pair.kindleUpdated,
-                        extra: pair.kindlePercent.map { String(format: "%.0f%%", $0) })
+                        extra: pair.kindlePage.map { "第 \($0) 頁" } ?? pair.kindlePercent.map { String(format: "%.0f%%", $0) })
+                if pair.isPDF {
+                    Text("PDF 依頁數同步閱讀位置，標註暫不同步。").font(.caption).foregroundStyle(.secondary)
+                }
                 if ["changed", "conflict"].contains(pair.positionState ?? "") {
                     Picker("同步方式", selection: $pair.positionTarget) {
                         Text("Apple Books 的位置 → Kindle").tag("kindle")

@@ -331,7 +331,11 @@ def apply(plan):
         results['kindle_edit'] = native_highlights.edit(config, kindle_id, to_kindle_edit, backups)
     if plan.get('position') in ('apple', 'kindle'):
         emit(event='writing', step='Moving the reading position')
-        results['position'] = native_position.transfer(config, apple_id, kindle_id, plan['position'], backups, apply=True)
+        if sync_status.is_pdf(apple_id):
+            from . import pdf_position
+            results['position'] = pdf_position.transfer(modules, cfg, apple_id, kindle_id, plan['position'])
+        else:
+            results['position'] = native_position.transfer(config, apple_id, kindle_id, plan['position'], backups, apply=True)
     emit(event='writing', step='Saving the sync state')
     results['links'] = sync_status.record_baseline(modules, cfg, apple_id, kindle_id,
                                                    keep_position=plan.get('position') not in ('apple', 'kindle')
@@ -376,8 +380,6 @@ def package_for_kindle(apple_ids):
         files.append({'apple_id': apple_id, 'title': book['title'], 'path': str(target), 'size': size,
                       'too_large': size > SEND_TO_KINDLE_LIMIT})
         pending = [p for p in pending if p.get('apple_id') != apple_id]
-        if book['kind'] == 'send_only':
-            continue  # PDFs are sent but never paired
         pending.append({'to': 'kindle', 'apple_id': apple_id, 'path': str(target),
                         'titles': [book['title'], epub_title(target)],
                         'created': datetime.now(timezone.utc).isoformat()})

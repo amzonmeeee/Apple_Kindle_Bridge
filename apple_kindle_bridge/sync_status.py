@@ -272,8 +272,31 @@ def highlight_changes(book, baseline, note_offset, kindle_edits=False):
     return changes, apple, kindle
 
 
+def pdf_pair_status(modules, apple_id, kindle_id, baseline):
+    from . import pdf_position
+    result = {'apple_id': apple_id, 'kindle_id': kindle_id, 'has_baseline': bool(baseline), 'pdf': True,
+              'highlights': {'changes': [], 'pdf': True}}
+    try:
+        result['position'] = pdf_position.status(modules, apple_id, kindle_id, baseline)
+    except ValueError as exc:
+        result['position'] = {'state': 'error', 'error': str(exc)}
+    state = result['position'].get('state')
+    result['state'] = 'needs_sync' if state in ('changed', 'conflict') else 'error' if state == 'error' else 'synced'
+    return result
+
+
+def is_pdf(apple_id):
+    from .apple_position import selected_book
+    try:
+        return str(selected_book(apple_id)[0]).lower().endswith('.pdf')
+    except ValueError:
+        return False
+
+
 def pair_status(modules, cfg, apple_id, kindle_id):
     baseline = load_baseline(apple_id)
+    if is_pdf(apple_id):
+        return pdf_pair_status(modules, apple_id, kindle_id, baseline)
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     result = {'apple_id': apple_id, 'kindle_id': kindle_id, 'has_baseline': bool(baseline)}
     try:
@@ -312,6 +335,12 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
     the user left unselected is listed again next time.
     """
     previous = load_baseline(apple_id)
+    if is_pdf(apple_id):
+        from . import pdf_position
+        position = previous.get('position') if keep_position and previous.get('position') \
+            else pdf_position.baseline(modules, apple_id, kindle_id)
+        save_baseline(apple_id, {'position': position, 'highlights': []})
+        return 0
     old_links = {link['apple']: link for link in previous.get('highlights', [])}
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     book = Book(modules, apple_id, kindle_id)

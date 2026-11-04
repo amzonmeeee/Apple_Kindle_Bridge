@@ -153,19 +153,26 @@ def overview(modules):
             pairs.append({'apple_asset_id': candidates[0]['id'], 'kindle_book_id': match[0]['id'], 'method': 'title'})
             paired_apple.add(candidates[0]['id'])
             paired_kindle.add(match[0]['id'])
-    # A PDF sent to Kindle appears there as a book of its own. It is never synced,
-    # so mark the Apple PDF as sent and hide the Kindle copy.
-    pdf_titles = {norm_title(b['title']): b for b in apple if b['kind'] == 'send_only'}
+    # A PDF sent to Kindle arrives as a converted book. Pair it by title; its
+    # reading position syncs page by page.
+    pdf_titles = {}
+    for b in apple:
+        if b['kind'] == 'send_only' and b['id'] not in paired_apple:
+            pdf_titles.setdefault(norm_title(b['title']), []).append(b)
     for k in kindle:
-        a = pdf_titles.get(norm_title(k['title']))
-        if a and k['id'] not in paired_kindle:
-            a['on_kindle'] = True
+        candidates = pdf_titles.get(norm_title(k['title']), [])
+        if len(candidates) == 1 and k['id'] not in paired_kindle and k['type'] == 'PDOC':
+            a = candidates[0]
+            add_pair(a['id'], k['id'], 'pdf')
+            pairs.append({'apple_asset_id': a['id'], 'kindle_book_id': k['id'], 'method': 'pdf'})
+            paired_apple.add(a['id'])
             paired_kindle.add(k['id'])
     result = {'pairs': [], 'apple_only': [], 'kindle_only': [], 'protected': []}
     for p in pairs:
         a, k = apple_by_id[p['apple_asset_id']], kindle_by_id[p['kindle_book_id']]
-        ready = a['kind'] == 'transferable' and k['kind'] == 'transferable'
+        ready = a['kind'] in ('transferable', 'send_only') and k['kind'] == 'transferable'
         result['pairs'].append({'apple': a, 'kindle': k, 'method': p.get('method'), 'ready': ready,
+                                'pdf': a['kind'] == 'send_only',
                                 'reason': None if ready else (a.get('reason') if a['kind'] != 'transferable' else k.get('reason'))})
     for b in apple:
         if b['id'] not in paired_apple:
