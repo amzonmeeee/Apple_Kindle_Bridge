@@ -226,9 +226,10 @@ def apple_edits(apple_id, edits):
                 continue
             value = edit['kindle_value']
             style = apple_style(value['color'], value['underline'])
+            # Keeping the Kindle version also restores a highlight deleted in Apple Books.
             db.execute('UPDATE ZAEANNOTATION SET ZANNOTATIONNOTE=?, ZANNOTATIONSTYLE=?, ZANNOTATIONISUNDERLINE=?, '
-                       'ZANNOTATIONMODIFICATIONDATE=?, ZFUTUREPROOFING11=?, Z_OPT=COALESCE(Z_OPT,0)+1 '
-                       'WHERE ZANNOTATIONUUID=? AND ZANNOTATIONASSETID=? AND ZANNOTATIONDELETED=0',
+                       'ZANNOTATIONDELETED=0, ZANNOTATIONMODIFICATIONDATE=?, ZFUTUREPROOFING11=?, '
+                       'Z_OPT=COALESCE(Z_OPT,0)+1 WHERE ZANNOTATIONUUID=? AND ZANNOTATIONASSETID=?',
                        (value['note'], style, int(value['underline']), now, str(now), uuid, apple_id))
     subprocess.run(['open', '-g', '-a', 'Books', path], capture_output=True)
     return {'backup': str(backup), 'edited': len(edits)}

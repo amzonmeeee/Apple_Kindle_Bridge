@@ -403,15 +403,16 @@ struct ChangeRow: View {
                 if let a = change.valueText("apple_value") { Text("Apple Books：\(a)").font(.caption).foregroundStyle(.secondary) }
                 if let k = change.valueText("kindle_value") { Text("Kindle：\(k)").font(.caption).foregroundStyle(.secondary) }
                 if change.canChooseTarget {
-                    Picker("採用", selection: $change.target) {
-                        Text("採用 Kindle 的版本").tag("apple")
-                        Text("採用 Apple Books 的版本").tag("kindle")
+                    Picker("", selection: $change.target) {
+                        Text("保留 Kindle 的版本（寫入 Apple Books）").tag("apple")
+                        Text("保留 Apple Books 的版本（寫入 Kindle）").tag("kindle")
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 360)
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    .onChange(of: change.target) { _, _ in change.selected = change.available }
                 }
                 if !change.available {
-                    Text("暫時無法寫入 Kindle 的修改或刪除，需要先擷取一次 Kindle 的編輯格式。")
+                    Text("暫時無法把修改或刪除寫入 Kindle，需要先擷取一次 Kindle 的編輯格式。")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }

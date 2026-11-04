@@ -46,6 +46,7 @@ final class Change: Identifiable, ObservableObject {
         selected = raw["selected"] as? Bool ?? false
         target = raw["target"] as? String ?? "apple"
         canChooseTarget = ["differs", "conflict"].contains(kind)
+        if canChooseTarget { selected = target == "apple" }
     }
 
     /// Only Apple-side edits are available until the Kindle edit format is captured.
@@ -67,8 +68,8 @@ final class Change: Identifiable, ObservableObject {
     }
 
     func valueText(_ key: String) -> String? {
-        guard let value = raw[key] as? [String: Any] else { return key == "apple_value" && kind == "conflict" ? "已刪除" : nil }
-        let note = (value["note"] as? String).map { "筆記：\($0)" } ?? "無筆記"
+        guard let value = raw[key] as? [String: Any] else { return kind == "conflict" ? "已刪除" : nil }
+        let note = (value["note"] as? String).map { "筆記：" + $0.replacingOccurrences(of: "\n", with: " ⏎ ") } ?? "無筆記"
         let color = Colors.name(value["color"] as? String)
         return "\(color)・\(note)"
     }
