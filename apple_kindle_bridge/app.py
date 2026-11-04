@@ -449,6 +449,7 @@ def import_to_apple(kindle_ids):
 
 def main(argv):
     command, args = argv[0], argv[1:]
+    paths.tidy()
     if command == 'doctor':
         return doctor()
     if command == 'library':

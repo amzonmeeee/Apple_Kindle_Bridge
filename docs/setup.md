@@ -34,6 +34,7 @@ The runtime files are local and do not form part of the Git repository.
 
 ### Prepare the engine sources
 
+Run `python3 tools/fetch-engine-sources.py` to do the steps below, or do them by hand.
 Use the source URLs in [runtime-manifest.json](../third_party/positions/runtime-manifest.json).
 Download the CRengine, pkgconf, xxHash, and FreeType archives.
 Compare each archive with its recorded SHA-256 value.

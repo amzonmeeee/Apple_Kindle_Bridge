@@ -8,6 +8,7 @@ from pathlib import Path
 import plistlib
 import shutil
 import sqlite3
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTED_KINDLE_VERSIONS = {'7.70.1'}
@@ -90,3 +91,32 @@ def kindle_compatibility(app_path, databases):
     if missing:
         raise ValueError(f'Kindle {version} changed its database layout: {missing}; no writes performed')
     return {'kindle_version': version, 'kindle_version_tested': version in TESTED_KINDLE_VERSIONS}
+
+
+RETENTION_DAYS = 30
+
+
+def prune(folder, days=RETENTION_DAYS):
+    """Delete files older than `days` in an app folder. Returns the number removed."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return 0
+    cutoff = time.time() - days * 86400
+    removed = 0
+    for item in folder.iterdir():
+        if item.is_file() and item.stat().st_mtime < cutoff:
+            item.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def tidy():
+    """Keep backups for 30 days and the error log under 1 MB."""
+    base = home()
+    if base is None:
+        return
+    prune(backup_dir())
+    prune(data_dir() / 'outbox')
+    log = base / 'logs' / 'errors.log'
+    if log.exists() and log.stat().st_size > 1_000_000:
+        log.write_text(log.read_text(errors='ignore')[-200_000:])

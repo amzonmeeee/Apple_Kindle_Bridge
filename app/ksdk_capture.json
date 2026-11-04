@@ -1,0 +1,26 @@
+{
+  "create": {
+    "action": 1,
+    "dirty_flag": 0,
+    "sync_behavior": 0,
+    "retry_count": 0,
+    "expiration_timestamp": ""
+  },
+  "note_offset": 0,
+  "mirror_tables": [],
+  "kindle_version": "7.70.1",
+  "update_note": {
+    "action": 2,
+    "dirty_flag": 0
+  },
+  "update_highlight": {
+    "action": 1,
+    "dirty_flag": 1
+  },
+  "delete": {
+    "action": 3,
+    "dirty_flag": 0
+  },
+  "source": "Observed native test-book edits in Kindle 7.70.1; captured online before queue drain",
+  "edit_source": "Observed Kindle 7.70.1 edits on 2026-11-04: note text edit, color change, highlight delete; accepted by the server"
+}

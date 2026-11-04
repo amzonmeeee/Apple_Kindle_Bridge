@@ -65,3 +65,8 @@ Position conversion needs the additional tools in the [setup instructions](docs/
 ```sh
 python3 -m unittest discover -s tests -q
 ```
+
+## License
+
+GNU Affero General Public License 3.0. See [LICENSE](LICENSE) and
+[third-party notices](THIRD_PARTY_NOTICES.md).

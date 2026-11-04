@@ -9,16 +9,26 @@ It is for personal use and is signed ad hoc.
 ./app/build.sh            # writes ~/Applications/Apple Kindle Bridge.app
 ```
 
-The build needs the Swift compiler and the CRengine probe in `.runtime/`
-([setup](setup.md)). It also needs the private Kindle edit capture from
-`state/native-pilot-evidence/ksdk_capture.json`, or a path in `AKB_CAPTURE`.
-The app bundle holds only the bridge source, the probe, and the capture.
+The build needs the Swift compiler and the CRengine probe in `.runtime/`:
+
+```sh
+python3 tools/fetch-engine-sources.py   # pinned, checksum-verified sources
+python3 tools/build-engine.py
+```
+
+The Kindle edit codes come from `app/ksdk_capture.json` (codes only, no book
+data), or from a path in `AKB_CAPTURE`. `AKB_VERSION` overrides the version.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the unit tests and builds the
+app on every push. A `v*` tag publishes the zip as a release.
 
 ## First launch
 
 The app downloads its tools into
 `~/Library/Application Support/Apple Kindle Bridge/runtime`. Every download is
-pinned to a version and checksum in `apple_kindle_bridge/runtime_install.py`:
+pinned to a version and checksum in `apple_kindle_bridge/runtime_install.py`.
+Backups and packaged EPUBs older than 30 days are deleted on each run, and the
+error log is kept under 1 MB. The tools are:
 Python 3.12.16, lxml 6.1.3, Node 24.22.1 with the locked jsdom, Calibre 9.17.0,
 KFX Input 2.34.2, and clippyconvert at the reviewed commit. The runtime takes
 about 1.4 GB, mostly Calibre. Settings → Remove deletes the whole folder.

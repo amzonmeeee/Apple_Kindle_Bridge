@@ -3,6 +3,7 @@ tools/*
 !tools/build-engine.py
 !tools/crengine-probe.cpp
 !tools/convert-position.mjs
+!tools/fetch-engine-sources.py
 state/
 __pycache__/
 *.pyc
