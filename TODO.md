@@ -33,14 +33,15 @@ Device: Kindle Paperwhite 5 8GB, firmware 5.19.2, stock (no jailbreak, no KORead
 - [x] Verify offline reading and reconnect. Record how competing device changes behave.
   Tested on a long book; see [device results](docs/native-positions.md#device-results).
 
-## Mac app (in progress)
+## Mac app
 
 See [Mac app](docs/app.md).
 
 - [x] Relocatable runtime with pinned first-run downloads.
 - [x] Library pairing, status with baselines, apply, and imports.
 - [x] SwiftUI app with onboarding, sync list, library, and settings.
-- [ ] Test onboarding, sync, and both imports in the app.
+- [x] Test onboarding, sync, and both imports in the app (2026-11-04).
+  Mock books in both directions arrived with highlights, colors, and notes.
 - [ ] Capture the Kindle edit and delete format to enable those writes.
 - [ ] Try one personal book with existing highlights before wider use.
 
