@@ -196,7 +196,7 @@ struct BookChecklist: View {
                         Text(book.title).lineLimit(1)
                         HStack(spacing: 6) {
                             if book.kind == "send_only" {
-                                Text("PDF・同步頁數，不同步標註").font(.caption).foregroundStyle(.orange)
+                                Text("PDF・單向同步到 Kindle").font(.caption).foregroundStyle(.orange)
                             }
                             if book.pending {
                                 Text("等待配對").font(.caption).foregroundStyle(.blue)
@@ -353,7 +353,7 @@ struct PositionSection: View {
                 Excerpt(label: "Kindle", text: pair.kindleExcerpt, time: pair.kindleUpdated,
                         extra: pair.kindlePage.map { "第 \($0) 頁" } ?? pair.kindlePercent.map { String(format: "%.0f%%", $0) })
                 if pair.isPDF {
-                    Text("PDF 只能從 Apple Books 同步頁數到 Kindle，標註暫不同步。").font(.caption).foregroundStyle(.secondary)
+                    Text("PDF 只能從 Apple Books 同步到 Kindle：閱讀頁數、畫線和筆記。Kindle 上的改動不會寫回 Apple Books。").font(.caption).foregroundStyle(.secondary)
                 }
                 if pair.positionState == "kindle_ahead" {
                     Text("Kindle 讀到比較後面。PDF 的閱讀位置無法寫回 Apple Books：Mac 上的 Apple Books 用預覽程式打開 PDF，不會把別的程式寫入的頁數上傳到 iCloud。")

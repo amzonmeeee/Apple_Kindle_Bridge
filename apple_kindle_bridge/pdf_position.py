@@ -245,3 +245,156 @@ def baseline(modules, apple_id, kindle_id):
         apple = apple_page(db, apple_id)
     kindle = kindle_row(kindle_db, kindle_id)
     return {'apple_page': apple['page'], 'kindle_page': pdf.kindle_to_page(kindle['ZRAWCURRENTPOSITION'] or 0)}
+
+
+# ---- highlights, Apple Books to Kindle only --------------------------------
+# Apple Books writes PDF highlights into the PDF file itself, which iCloud
+# keeps in step across devices. They are read with PDFKit and placed in the
+# Kindle text near their page.
+
+KINDLE_HUES = {'yellow': 50, 'orange': 25, 'pink': 330, 'blue': 210}
+
+
+def kindle_color(hex_color):
+    import colorsys
+    if not hex_color or len(hex_color) != 7:
+        return 'yellow'
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    hue, _, saturation = colorsys.rgb_to_hls(r, g, b)
+    if saturation < 0.15:
+        return 'yellow'
+    degrees = hue * 360
+    return min(KINDLE_HUES, key=lambda c: min(abs(degrees - KINDLE_HUES[c]), 360 - abs(degrees - KINDLE_HUES[c])))
+
+
+def apple_highlights(path):
+    resources = os.environ.get('AKB_RESOURCES')
+    tool = Path(resources) / 'pdftext' if resources else paths.ROOT / '.runtime' / 'pdftext'
+    run = subprocess.run([str(tool), '--annotations', str(path)], capture_output=True, timeout=120)
+    if run.returncode:
+        raise ValueError('Could not read the PDF highlights')
+    found = []
+    for item in json.loads(run.stdout):
+        if item['type'] not in ('Highlight', 'Underline') or not compact(item.get('text', ''))[0]:
+            continue
+        text = ' '.join(item['text'].split())
+        key = f"{item['page']}:{hashlib.sha1(compact(text)[0].encode()).hexdigest()[:12]}"
+        found.append({'key': key, 'page': item['page'], 'text': text,
+                      'color': 'yellow' if item['type'] == 'Underline' else kindle_color(item.get('color')),
+                      'underline': item['type'] == 'Underline',
+                      'note': (item.get('contents') or item.get('popup') or '').strip() or None,
+                      'updated': item.get('modified', 0)})
+    return found
+
+
+def locate(pdf, item):
+    """Kindle range for a PDF highlight, searched on its page first."""
+    needle = compact(item['text'])[0]
+    start, _ = pdf.page_to_kindle(item['page'])
+    begin = bisect.bisect_left(pdf.kindle_pos, start)
+    window = pdf.kindle_text[max(0, begin - 2000):begin + len(pdf.pages[item['page']]) + 2000]
+    if window.count(needle) == 1:
+        index = max(0, begin - 2000) + window.index(needle)
+    elif pdf.kindle_text.count(needle) == 1:
+        index = pdf.kindle_text.index(needle)
+    else:
+        raise ValueError('Highlighted text is not unique in the Kindle book')
+    return pdf.kindle_pos[index], pdf.kindle_pos[index + len(needle) - 1]
+
+
+def kindle_state(modules, book, offset):
+    ksdk = modules['ksdk']
+    annotations = ksdk.load_existing_annotations(ksdk.find_ksdk_db(), book.dataset_id)
+    highlights, notes = {}, {}
+    for a in annotations:
+        if a.source == 'nonsyncable_annotations':
+            continue
+        metadata = a.payload.get('json_metadata', {})
+        metadata = json.loads(metadata) if isinstance(metadata, str) else metadata
+        if a.dataset in (1, 12):
+            highlights.setdefault(a.annotation_id, {'id': a.annotation_id, 'start': a.start, 'end': a.end,
+                                                    'color': metadata.get('mchl_color'), 'underline': a.dataset == 12})
+        elif a.dataset == 3:
+            notes[a.start] = (metadata.get('note_text') or '').strip() or None
+    for h in highlights.values():
+        h['note'] = notes.get(h['end'] + offset)
+    return highlights
+
+
+def value(item):
+    return {'color': item['color'], 'underline': item['underline'], 'note': item['note']}
+
+
+def highlight_changes(modules, cfg, apple_id, kindle_id, baseline):
+    book, reader, pdf, path, annotations, kindle_db = open_pair(modules, apple_id, kindle_id)
+    capture = json.loads(Path(cfg['capture']).expanduser().read_text())
+    kindle = kindle_state(modules, book, capture['note_offset'])
+    links = {link['apple']: link for link in baseline.get('highlights', [])}
+    changes, seen = [], set()
+    for item in apple_highlights(path):
+        seen.add(item['key'])
+        base = {'id': 'pdf:' + item['key'], 'text': item['text'][:200], 'target': 'kindle',
+                'supported': True, 'selected': True, 'apple_ids': [item['key']], 'apple_value': value(item),
+                'pdf_highlight': item}
+        try:
+            start, end = locate(pdf, item)
+        except ValueError as exc:
+            changes.append(dict(base, kind='add', supported=False, selected=False, reason=str(exc)))
+            continue
+        match = [k for k in kindle.values() if k['start'] == start and k['end'] == end]
+        if not match:
+            if any(max(start, k['start']) <= min(end, k['end']) for k in kindle.values()):
+                changes.append(dict(base, kind='add', supported=False, selected=False,
+                                    reason='Another Kindle highlight overlaps this passage'))
+            else:
+                changes.append(dict(base, kind='add', start=start, end=end))
+            continue
+        k = match[0]
+        current = {'color': k['color'], 'underline': k['underline'], 'note': k['note']}
+        if current != value(item):
+            changes.append(dict(base, kind='update', kindle_ids=[k['id']], kindle_value=current))
+    for key, link in links.items():
+        if key not in seen and link['kindle'] in kindle:
+            changes.append({'id': 'pdf-delete:' + key, 'kind': 'delete', 'target': 'kindle', 'text': link.get('text', '')[:200],
+                            'supported': True, 'selected': True, 'kindle_ids': [link['kindle']], 'apple_value': None})
+    return changes
+
+
+def add_highlights(modules, cfg, kindle_id, items):
+    """Write new Kindle highlights (and notes) for PDF highlights."""
+    ksdk = modules['ksdk']
+    book = [b for b in ksdk.load_kindle_books() if b.bookid == kindle_id and b.guid][0]
+    capture = json.loads(Path(cfg['capture']).expanduser().read_text())
+    rows = []
+    for item in items:
+        created = int((item.get('updated') or time.time()) * 1000)
+        ann_id, dataset, payload = ksdk.make_highlight(book, item['start'], item['end'], item['color'], created,
+                                                       underline=item['underline'])
+        rows.append((ann_id, dataset, book.dataset_id, payload, created))
+        if item['note']:
+            nid, ndataset, npayload = ksdk.make_note(book, item['end'] + capture['note_offset'], item['note'], created)
+            rows.append((nid, ndataset, book.dataset_id, npayload, created))
+    if not rows:
+        return {'inserted_rows': 0}
+    quit_app('Amazon Kindle', 'Kindle')
+    db = ksdk.find_ksdk_db()
+    saved = backup(Path(db), 'kindle-')
+    inserted = ksdk.insert_local_edits(db, rows, capture)
+    subprocess.run(['open', '-g', '-a', cfg['kindle_app']], capture_output=True)
+    return {'inserted_rows': inserted, 'backup': saved}
+
+
+def highlight_baseline(modules, cfg, apple_id, kindle_id):
+    book, reader, pdf, path, annotations, kindle_db = open_pair(modules, apple_id, kindle_id)
+    capture = json.loads(Path(cfg['capture']).expanduser().read_text())
+    kindle = kindle_state(modules, book, capture['note_offset'])
+    links = []
+    for item in apple_highlights(path):
+        try:
+            start, end = locate(pdf, item)
+        except ValueError:
+            continue
+        match = [k for k in kindle.values() if k['start'] == start and k['end'] == end]
+        if match:
+            links.append({'apple': item['key'], 'kindle': match[0]['id'], 'text': item['text'][:200]})
+    return links

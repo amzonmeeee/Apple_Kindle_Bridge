@@ -307,6 +307,8 @@ def apply(plan):
     config, backups = paths.native_config(), paths.backup_dir()
     results = {'skipped': []}
     changes = plan.get('changes', [])
+    if sync_status.is_pdf(apple_id):
+        return apply_pdf(plan, cfg, modules)
     to_apple_add = [c for c in changes if c['target'] == 'apple' and c['kind'] == 'add']
     to_apple_edit = [c for c in changes if c['target'] == 'apple' and c['kind'] != 'add']
     to_kindle_add = [c for c in changes if c['target'] == 'kindle' and c['kind'] == 'add']
@@ -339,6 +341,30 @@ def apply(plan):
     emit(event='writing', step='Saving the sync state')
     results['links'] = sync_status.record_baseline(modules, cfg, apple_id, kindle_id,
                                                    keep_position=plan.get('position') not in ('apple', 'kindle')
+                                                   and not plan.get('position_synced'))
+    return results
+
+
+def apply_pdf(plan, cfg, modules):
+    """PDFs sync from Apple Books to Kindle only: highlights, notes, and the page."""
+    from . import native_highlights, pdf_position
+    apple_id, kindle_id = plan['apple_id'], plan['kindle_id']
+    changes = [c for c in plan.get('changes', []) if c['target'] == 'kindle']
+    results = {'skipped': []}
+    adds = [dict(c['pdf_highlight'], start=c['start'], end=c['end']) for c in changes if c['kind'] == 'add']
+    if adds:
+        emit(event='writing', step='Adding PDF highlights to Kindle')
+        results['kindle_add'] = pdf_position.add_highlights(modules, cfg, kindle_id, adds)
+    edits = [c for c in changes if c['kind'] != 'add']
+    if edits:
+        emit(event='writing', step='Updating PDF highlights in Kindle')
+        results['kindle_edit'] = native_highlights.edit(paths.native_config(), kindle_id, edits, paths.backup_dir())
+    if plan.get('position') == 'kindle':
+        emit(event='writing', step='Moving the reading position')
+        results['position'] = pdf_position.transfer(modules, cfg, apple_id, kindle_id, 'kindle')
+    emit(event='writing', step='Saving the sync state')
+    results['links'] = sync_status.record_baseline(modules, cfg, apple_id, kindle_id,
+                                                   keep_position=plan.get('position') != 'kindle'
                                                    and not plan.get('position_synced'))
     return results
 

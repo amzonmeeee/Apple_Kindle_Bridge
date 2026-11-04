@@ -65,7 +65,11 @@ columns they use. An untested Kindle version shows a warning in onboarding.
   itself, and on a Mac it opens PDFs in Preview, so a page written into its
   database never reached the iPhone (tested 2026-11-04). EPUB writes reach
   iCloud because Apple Books reopens the book and saves the position itself.
-  PDF highlights are not synced. The PDF layout
+  PDF highlights also go from Apple Books to Kindle only. Apple Books writes
+  them into the PDF file, which iCloud keeps current; `pdftext --annotations`
+  reads them with PDFKit. Each is placed by its text near its page, colors map
+  to the nearest Kindle color, and notes come from the annotation contents.
+  Additions, edits, and deletions (through a baseline) are written to Kindle. The PDF layout
   choice (keep original, the default, or adjustable) is set in the library and
   applied automatically with Accessibility access; otherwise pick it by hand.
 - The Send to Kindle extension reports success even after Close. With

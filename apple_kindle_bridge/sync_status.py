@@ -272,16 +272,21 @@ def highlight_changes(book, baseline, note_offset, kindle_edits=False):
     return changes, apple, kindle
 
 
-def pdf_pair_status(modules, apple_id, kindle_id, baseline):
+def pdf_pair_status(modules, cfg, apple_id, kindle_id, baseline):
     from . import pdf_position
     result = {'apple_id': apple_id, 'kindle_id': kindle_id, 'has_baseline': bool(baseline), 'pdf': True,
               'highlights': {'changes': [], 'pdf': True}}
     try:
         result['position'] = pdf_position.status(modules, apple_id, kindle_id, baseline)
-    except ValueError as exc:
+    except Exception as exc:
         result['position'] = {'state': 'error', 'error': str(exc)}
+    try:
+        result['highlights']['changes'] = pdf_position.highlight_changes(modules, cfg, apple_id, kindle_id, baseline)
+    except Exception as exc:
+        result['highlights'].update(state='error', error=str(exc))
     state = result['position'].get('state')
-    result['state'] = ('needs_sync' if state in ('changed', 'conflict') else 'error' if state == 'error'
+    writable = any(c['supported'] for c in result['highlights']['changes'])
+    result['state'] = ('needs_sync' if state in ('changed', 'conflict') or writable else 'error' if state == 'error'
                        else 'one_way' if state == 'kindle_ahead' else 'synced')
     return result
 
@@ -297,7 +302,7 @@ def is_pdf(apple_id):
 def pair_status(modules, cfg, apple_id, kindle_id):
     baseline = load_baseline(apple_id)
     if is_pdf(apple_id):
-        return pdf_pair_status(modules, apple_id, kindle_id, baseline)
+        return pdf_pair_status(modules, cfg, apple_id, kindle_id, baseline)
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     result = {'apple_id': apple_id, 'kindle_id': kindle_id, 'has_baseline': bool(baseline)}
     try:
@@ -340,8 +345,9 @@ def record_baseline(modules, cfg, apple_id, kindle_id, keep_position=False):
         from . import pdf_position
         position = previous.get('position') if keep_position and previous.get('position') \
             else pdf_position.baseline(modules, apple_id, kindle_id)
-        save_baseline(apple_id, {'position': position, 'highlights': []})
-        return 0
+        links = pdf_position.highlight_baseline(modules, cfg, apple_id, kindle_id)
+        save_baseline(apple_id, {'position': position, 'highlights': links})
+        return len(links)
     old_links = {link['apple']: link for link in previous.get('highlights', [])}
     capture = json.loads(Path(cfg['capture']).expanduser().read_text())
     book = Book(modules, apple_id, kindle_id)
